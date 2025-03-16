@@ -49,7 +49,13 @@ PORT=5000  # Web服务端口，默认5000
 2. 前往 "API development tools"
 3. 创建一个新应用程序，获取API_ID和API_HASH
 
-### 3. 运行应用
+### 3. 本地开发应用
+
+```bash
+git clone https://github.com/yanyuwangluo/TGForwarder.git
+
+pip install -r requirements.txt
+```
 
 标准启动：
 ```bash
@@ -58,11 +64,8 @@ python app.py
 
 指定端口启动：
 ```bash
-# 方法1：通过命令行参数
 python app.py 8080
 
-# 方法2：通过环境变量
-PORT=8080 python app.py
 ```
 
 应用将在指定端口上启动，默认为 http://127.0.0.1:5000。使用自定义端口时，访问地址相应变更。
