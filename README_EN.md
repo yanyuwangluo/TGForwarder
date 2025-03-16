@@ -12,7 +12,10 @@ A Python-based Telegram channel forwarding tool that uses a regular user account
 - Cache dialog list to local database
 - Logging system with file rotation
 - Custom port configuration
-
+## Image Example
+![image](https://github.com/yanyuwangluo/TGForwarder/blob/main/img/1.png)
+![image](https://github.com/yanyuwangluo/TGForwarder/blob/main/img/2.png)
+![image](https://github.com/yanyuwangluo/TGForwarder/blob/main/img/3.png)
 ## Installation and Configuration
 
 ### 1. Install Dependencies
