@@ -32,46 +32,103 @@ class TelegramForwarder:
     async def start(self):
         """启动Telegram客户端"""
         try:
-            logger.debug("开始创建Telegram客户端实例")
-            # 更新设备信息，尝试避免UPDATE_APP_TO_LOGIN错误
-            self.client = TelegramClient(
-                'tg_forwarder_session', 
-                self.api_id, 
-                self.api_hash,
-                device_model="Desktop",
-                system_version="Windows 10",
-                app_version="1.0.0",
-                lang_code="zh"
-            )
+            logger.debug("准备启动Telegram客户端")
             
-            # 尝试连接
-            logger.debug("尝试连接到Telegram服务器")
-            await self.client.connect()
+            # 获取会话名称
+            session_name = os.getenv('TG_SESSION_NAME', self.phone)
+            session_path = f"sessions/{session_name}"
             
-            # 如果需要登录
-            if not await self.client.is_user_authorized():
-                logger.info(f"需要登录Telegram账号 {self.phone}")
-                await self.client.send_code_request(self.phone)
-                logger.info("验证码已发送到您的Telegram账号，请在控制台输入")
-                verification_code = input("请输入收到的验证码: ")
-                await self.client.sign_in(self.phone, verification_code)
+            # 创建会话目录
+            os.makedirs("sessions", exist_ok=True)
             
-            logger.info("Telegram客户端已登录")
+            # 初始化客户端
+            self.client = TelegramClient(session_path, self.api_id, self.api_hash)
             
-            # 注册消息处理器
-            if not self._handlers_registered:
-                logger.debug("注册消息处理器")
-                self.client.add_event_handler(
-                    self.message_handler,
-                    events.NewMessage()
+            # 登录选项
+            login_2fa_password = os.getenv('TG_2FA_PASSWORD', '')  # 二次验证密码
+            login_code = os.getenv('TG_LOGIN_CODE', '')  # 预设的登录验证码
+            always_confirm = os.getenv('TG_ALWAYS_CONFIRM', 'false').lower() == 'true'  # 是否总是自动确认
+            
+            # 自定义登录过程的回调函数
+            async def custom_login_callback(login_event):
+                logger.debug(f"收到登录事件: {login_event.__class__.__name__}")
+                
+                # 如果是密码请求（二次验证）
+                if login_event.__class__.__name__ == 'PasswordHashInvalidEvent':
+                    logger.error("二次验证密码无效")
+                    return None
+                elif login_event.__class__.__name__ == 'Password':
+                    # 如果设置了二次验证密码，则使用它
+                    if login_2fa_password:
+                        logger.info("使用配置文件中的二次验证密码")
+                        return login_2fa_password
+                    logger.info("需要二次验证密码，请在控制台输入")
+                    return None  # 返回None将使用默认处理方式（交互式输入）
+                    
+                # 如果是登录码请求
+                elif login_event.__class__.__name__ == 'PhoneCodeEvent':
+                    logger.error("提供的登录验证码无效")
+                    return None
+                elif login_event.__class__.__name__ == 'PhoneCode':
+                    # 如果设置了登录码，则使用它
+                    if login_code:
+                        logger.info("使用配置文件中的登录验证码")
+                        return login_code
+                    logger.info("需要登录验证码，请查看Telegram消息并在控制台输入")
+                    return None  # 返回None将使用默认处理方式（交互式输入）
+                    
+                # 如果是是否确认登录请求
+                elif login_event.__class__.__name__ == 'TermsOfService':
+                    if always_confirm:
+                        logger.info("自动接受服务条款")
+                        return True
+                    logger.info("需要确认Telegram服务条款，请在控制台确认")
+                    return None  # 返回None将使用默认处理方式（交互式输入）
+                    
+                # 处理其他登录事件
+                elif login_event.__class__.__name__ == 'LoginToken':
+                    logger.info("收到登录令牌请求，目前不支持自动处理，请手动操作")
+                    return None
+                    
+                # 默认返回None，使用默认的交互式处理
+                return None
+                
+            # 启动客户端，设置自定义登录处理
+            try:
+                logger.debug("开始连接Telegram服务器")
+                await self.client.start(
+                    phone=self.phone, 
+                    code_callback=custom_login_callback,
+                    password_callback=custom_login_callback,
+                    first_name="TeleRelay", last_name="Bot"
                 )
-                self._handlers_registered = True
-            
-            self.is_running = True
-            logger.info("Telegram客户端已启动并准备接收消息")
-            return True
+                
+                if not self.client.is_connected():
+                    logger.error("客户端连接失败")
+                    return False
+                    
+                self.is_running = True
+                logger.info("成功连接Telegram服务器")
+                
+                # 注册消息处理器
+                if not self._handlers_registered:
+                    logger.debug("注册消息处理器")
+                    self.client.add_event_handler(self.message_handler, events.NewMessage)
+                    self._handlers_registered = True
+                
+                # 获取客户端信息
+                me = await self.client.get_me()
+                logger.info(f"登录账号: {me.first_name} {getattr(me, 'last_name', '')} (@{me.username})")
+                
+                return True
+            except Exception as e:
+                logger.error(f"启动客户端时出错: {e}")
+                logger.error(traceback.format_exc())
+                self.is_running = False
+                return False
+                
         except Exception as e:
-            logger.error(f"启动Telegram客户端失败: {e}")
+            logger.error(f"初始化客户端时出错: {e}")
             logger.error(traceback.format_exc())
             self.is_running = False
             return False

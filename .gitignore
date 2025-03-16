@@ -1,0 +1,41 @@
+# Python缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 分发和打包
+dist/
+build/
+*.egg-info/
+
+# 虚拟环境
+venv/
+ENV/
+env/
+
+# 日志文件
+logs/
+*.log
+
+# 本地开发配置
+.env
+.flaskenv
+
+# 数据库文件
+*.db
+data/
+instance/
+
+# Telegram会话文件
+sessions/
+
+# IDE配置
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db 

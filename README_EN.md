@@ -1,4 +1,4 @@
-# TGForwarder
+# TeleRelay
 
 A Python-based Telegram channel forwarding tool that uses a regular user account (not a bot) to monitor specified channels and forward messages to other channels.
 
@@ -12,10 +12,9 @@ A Python-based Telegram channel forwarding tool that uses a regular user account
 - Cache dialog list to local database
 - Logging system with file rotation
 - Custom port configuration
-## Image Example
-![image](https://github.com/yanyuwangluo/TGForwarder/blob/main/img/1.png)
-![image](https://github.com/yanyuwangluo/TGForwarder/blob/main/img/2.png)
-![image](https://github.com/yanyuwangluo/TGForwarder/blob/main/img/3.png)
+- Docker support for easy deployment
+- GitHub Actions automated build
+
 ## Installation and Configuration
 
 ### 1. Install Dependencies
@@ -65,6 +64,77 @@ PORT=8080 python app.py
 
 The application will start on the specified port, default is http://127.0.0.1:5000. When using a custom port, the access address will change accordingly.
 
+## Docker Deployment
+
+The project supports Docker deployment, providing a simpler installation and management method.
+
+### Prerequisites
+
+1. Install Docker and Docker Compose
+2. Configure the `.env` file (same as configuration above)
+
+### Start with Docker
+
+```bash
+# Build and start the container
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop service
+docker-compose down
+```
+
+### Use Pre-built Docker Hub Image
+
+You can directly use our pre-built Docker image:
+
+```bash
+# Download and start (replace username with actual username)
+docker run -d --name telerelay \
+  -p 5000:5000 \
+  -v ./logs:/app/logs \
+  -v ./data:/app/data \
+  -v ./.env:/app/.env \
+  -v ./sessions:/app/sessions \
+  --restart unless-stopped \
+  username/telerelay:latest
+```
+
+### Docker Configuration Details
+
+Docker deployment automatically maps the following:
+- Port: Default 5000 port (can be modified with PORT in .env)
+- Log directory: `./logs` → `/app/logs`
+- Database: `./data` → `/app/data`
+- Configuration file: `./.env` → `/app/.env`
+- Telegram sessions: `./sessions` → `/app/sessions`
+
+You can customize these mappings by modifying `docker-compose.yml`.
+
+## GitHub Actions Automated Build
+
+This project uses GitHub Actions to automatically build and publish Docker images to Docker Hub.
+
+### Automation Workflow
+
+1. The build is automatically triggered when code is pushed to the main branch
+2. When a version tag is created (e.g., v1.0.0), a versioned image is automatically built
+3. Images are automatically pushed to Docker Hub
+
+### How to Use
+
+To enable automated builds in your own GitHub repository, you need to set the following Secrets:
+
+1. `DOCKERHUB_USERNAME`: Docker Hub username
+2. `DOCKERHUB_TOKEN`: Docker Hub access token (not your password)
+
+How to set up:
+1. On your GitHub repository page, click "Settings"
+2. Click "Secrets and variables" → "Actions"
+3. Click "New repository secret" to add the two keys above
+
 ## Usage Guide
 
 1. When running for the first time, you will be asked to verify your Telegram account. Please follow the prompts.
@@ -88,6 +158,7 @@ Log features:
 - Using a regular user account for automated mass forwarding may violate Telegram's Terms of Service. Please use with caution.
 - Channel ID format is typically `-100xxxxxxxxx`, or you can use the `@username` format.
 - Make sure the account has joined both source and target channels and has sufficient permissions.
+- When deploying with Docker, you need to verify your Telegram account on first startup. Please check the logs for instructions.
 
 ## FAQ
 
@@ -110,6 +181,11 @@ Log features:
    - Click the "Sync All Dialogs" button on the Channel Management page
    - The synchronization process may take some time, please be patient
    - Synchronized data will be cached to the local database for faster access
+
+5. How to verify Telegram account when using Docker?
+   - View container logs when first starting: `docker-compose logs -f`
+   - Follow the prompts in the logs to enter the verification code
+   - You can use `docker-compose exec telerelay bash` to enter the container for operation
 
 ## License
 

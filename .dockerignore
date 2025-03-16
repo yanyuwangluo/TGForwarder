@@ -1,0 +1,48 @@
+# Git
+.git
+.gitignore
+
+# 缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+ENV/
+
+# 日志
+logs/
+
+# 会话文件
+sessions/
+
+# 环境配置
+.env
+.env.example
+
+# 数据目录
+instance/
+data/
+
+# 其他
+.DS_Store
+Thumbs.db 
