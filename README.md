@@ -14,7 +14,10 @@
 - 缓存对话列表到本地数据库
 - 日志系统，支持文件轮转
 - 自定义端口运行
-
+## 图片实例
+![image](https://github.com/yanyuwangluo/TGForwarder/blob/main/img/1.png)
+![image](https://github.com/yanyuwangluo/TGForwarder/blob/main/img/2.png)
+![image](https://github.com/yanyuwangluo/TGForwarder/blob/main/img/3.png)
 ## 安装与配置
 
 ### 1. 安装依赖
