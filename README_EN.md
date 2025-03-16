@@ -122,6 +122,15 @@ This project uses GitHub Actions to automatically build and publish Docker image
 1. The build is automatically triggered when code is pushed to the main branch
 2. When a version tag is created (e.g., v1.0.0), a versioned image is automatically built
 3. Images are automatically pushed to Docker Hub
+4. Both ARM64 and AMD64 architectures are built simultaneously
+
+### Multi-Architecture Support
+
+TeleRelay Docker images support the following CPU architectures:
+- `linux/amd64`: For standard PCs, servers, and most cloud environments
+- `linux/arm64`: For Raspberry Pi 4, Apple M1/M2 series, AWS Graviton, and other ARM devices
+
+No special configuration is needed - Docker will automatically pull the image matching your device architecture.
 
 ### How to Use
 

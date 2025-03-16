@@ -149,6 +149,15 @@ Docker部署会自动映射以下内容：
 1. 当代码推送到main分支时，自动触发构建
 2. 当创建版本标签(如v1.0.0)时，自动构建带版本号的镜像
 3. 自动推送到Docker Hub
+4. 同时构建支持ARM64和AMD64架构的镜像
+
+### 多架构支持
+
+TeleRelay的Docker镜像支持以下CPU架构：
+- `linux/amd64`: 适用于标准PC、服务器、大多数云环境
+- `linux/arm64`: 适用于树莓派4、Apple M1/M2系列、AWS Graviton等ARM设备
+
+无需特殊配置，Docker会自动拉取匹配您设备架构的镜像。
 
 ### 如何使用
 
