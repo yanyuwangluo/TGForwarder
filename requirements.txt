@@ -1,0 +1,10 @@
+telethon==1.31.1
+flask==2.0.1
+flask-sqlalchemy==2.5.1
+python-dotenv==0.19.1
+werkzeug==2.0.3
+Jinja2==3.0.3
+itsdangerous==2.0.1
+click==8.0.3
+SQLAlchemy==1.4.31
+MarkupSafe==2.0.1

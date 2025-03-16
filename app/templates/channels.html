@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">查找频道ID</h5>
+        <div>
+            <button id="sync-dialogs-btn" class="btn btn-sm btn-warning me-2">
+                <i class="bi bi-arrow-repeat me-1"></i>同步所有对话
+            </button>
+            <button id="refresh-dialogs-btn" class="btn btn-sm btn-light">
+                <i class="bi bi-arrow-clockwise me-1"></i>刷新列表
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            从您的Telegram账号中选择已加入的频道或群组，查看其ID并添加到转发助手中。
+        </div>
+        
+        <div id="sync-status" class="alert alert-success d-none">
+            正在同步对话列表，请稍候...
+        </div>
+        
+        <div class="mb-3">
+            <label for="dialog-selector" class="form-label">选择频道或群组:</label>
+            <select class="form-select" id="dialog-selector">
+                <option value="" selected>-- 请选择 --</option>
+            </select>
+            <div class="form-text">加载中...</div>
+        </div>
+        
+        <div id="channel-id-container" class="d-none">
+            <div class="mb-3">
+                <label for="channel-id-display" class="form-label">频道ID:</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="channel-id-display" readonly>
+                    <button class="btn btn-outline-secondary" type="button" id="copy-id-btn">
+                        复制
+                    </button>
+                    <button class="btn btn-primary" type="button" id="use-id-btn">
+                        使用此ID
+                    </button>
+                </div>
+                <div class="form-text">ID格式已经过处理，可直接使用</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">添加/修改频道</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('main.manage_channels') }}">
+            <div class="mb-3">
+                <label for="channel_id" class="form-label">频道ID或用户名</label>
+                <input type="text" class="form-control" id="channel_id" name="channel_id" required
+                       placeholder="例如: -1001234567890 或 @channelname">
+                <div class="form-text">输入带有@的用户名或数字ID</div>
+            </div>
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="is_source" name="is_source">
+                    <label class="form-check-label" for="is_source">
+                        设为监听源（从此频道获取消息）
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="is_destination" name="is_destination">
+                    <label class="form-check-label" for="is_destination">
+                        设为转发目标（将消息转发到此频道）
+                    </label>
+                </div>
+            </div>
+            <div class="text-end">
+                <button type="submit" class="btn btn-primary">保存频道</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">已配置频道列表</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>名称</th>
+                        <th>类型</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for channel in channels %}
+                    <tr>
+                        <td>{{ channel.channel_id }}</td>
+                        <td>{{ channel.channel_title }}</td>
+                        <td>
+                            {% if channel.is_source and channel.is_destination %}
+                            <span class="badge bg-info">监听源 + 转发目标</span>
+                            {% elif channel.is_source %}
+                            <span class="badge bg-primary">监听源</span>
+                            {% elif channel.is_destination %}
+                            <span class="badge bg-success">转发目标</span>
+                            {% else %}
+                            <span class="badge bg-secondary">未分配</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form method="POST" action="{{ url_for('main.delete_channel', channel_id=channel.id) }}" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('确定要删除此频道吗？')">
+                                    删除
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center py-5 text-muted">
+                            暂无已配置频道
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const dialogSelector = document.getElementById('dialog-selector');
+        const statusText = dialogSelector.nextElementSibling;
+        const channelIdContainer = document.getElementById('channel-id-container');
+        const channelIdDisplay = document.getElementById('channel-id-display');
+        const copyIdBtn = document.getElementById('copy-id-btn');
+        const useIdBtn = document.getElementById('use-id-btn');
+        const channelIdInput = document.getElementById('channel_id');
+        const syncDialogsBtn = document.getElementById('sync-dialogs-btn');
+        const refreshDialogsBtn = document.getElementById('refresh-dialogs-btn');
+        const syncStatus = document.getElementById('sync-status');
+        
+        // 加载对话列表
+        loadDialogs();
+        
+        // 选择对话时显示ID
+        dialogSelector.addEventListener('change', function() {
+            const selectedValue = this.value;
+            if (selectedValue) {
+                const [id, title, type] = selectedValue.split('|');
+                channelIdDisplay.value = id;
+                channelIdContainer.classList.remove('d-none');
+            } else {
+                channelIdContainer.classList.add('d-none');
+            }
+        });
+        
+        // 复制ID按钮
+        copyIdBtn.addEventListener('click', function() {
+            channelIdDisplay.select();
+            document.execCommand('copy');
+            // 显示复制成功提示
+            const originalText = this.textContent;
+            this.textContent = '已复制';
+            this.classList.remove('btn-outline-secondary');
+            this.classList.add('btn-success');
+            
+            setTimeout(() => {
+                this.textContent = originalText;
+                this.classList.remove('btn-success');
+                this.classList.add('btn-outline-secondary');
+            }, 1500);
+        });
+        
+        // 使用此ID按钮
+        useIdBtn.addEventListener('click', function() {
+            channelIdInput.value = channelIdDisplay.value;
+            // 将页面滚动到添加频道表单
+            document.querySelector('.card:nth-child(2)').scrollIntoView({
+                behavior: 'smooth'
+            });
+        });
+        
+        // 同步对话按钮
+        syncDialogsBtn.addEventListener('click', function() {
+            syncDialogs();
+        });
+        
+        // 刷新对话列表按钮
+        refreshDialogsBtn.addEventListener('click', function() {
+            clearDialogSelector();
+            loadDialogs(true); // 传入true表示强制刷新
+        });
+        
+        // 同步对话函数
+        function syncDialogs() {
+            // 禁用按钮，显示同步状态
+            syncDialogsBtn.disabled = true;
+            refreshDialogsBtn.disabled = true;
+            syncStatus.textContent = '正在同步所有对话到本地数据库，这可能需要一些时间...';
+            syncStatus.classList.remove('d-none', 'alert-success', 'alert-danger');
+            syncStatus.classList.add('alert-warning');
+            
+            fetch('/api/sync_dialogs', {
+                method: 'POST',
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    syncStatus.textContent = `同步成功！已获取 ${data.count} 个对话并保存到本地数据库。`;
+                    syncStatus.classList.remove('alert-warning');
+                    syncStatus.classList.add('alert-success');
+                    
+                    // 重新加载对话选择器
+                    clearDialogSelector();
+                    loadDialogs(true);
+                } else {
+                    syncStatus.textContent = `同步失败: ${data.error || '未知错误'}`;
+                    syncStatus.classList.remove('alert-warning');
+                    syncStatus.classList.add('alert-danger');
+                }
+            })
+            .catch(error => {
+                console.error('同步失败:', error);
+                syncStatus.textContent = '同步失败，请检查网络连接或确保Telegram客户端已启动';
+                syncStatus.classList.remove('alert-warning');
+                syncStatus.classList.add('alert-danger');
+            })
+            .finally(() => {
+                // 恢复按钮状态
+                syncDialogsBtn.disabled = false;
+                refreshDialogsBtn.disabled = false;
+                
+                // 5秒后隐藏状态提示
+                setTimeout(() => {
+                    if (syncStatus.classList.contains('alert-success')) {
+                        syncStatus.classList.add('d-none');
+                    }
+                }, 5000);
+            });
+        }
+        
+        // 清空对话选择器
+        function clearDialogSelector() {
+            // 保留第一个默认选项，删除其他所有选项
+            while (dialogSelector.options.length > 1) {
+                dialogSelector.remove(1);
+            }
+            // 删除所有optgroup
+            const optgroups = dialogSelector.querySelectorAll('optgroup');
+            optgroups.forEach(group => group.remove());
+        }
+        
+        // 加载对话列表函数
+        function loadDialogs(forceRefresh = false) {
+            statusText.textContent = '正在加载频道和群组...';
+            
+            // 构建URL，如果需要强制刷新则添加参数
+            const url = forceRefresh ? '/api/dialogs?refresh=1' : '/api/dialogs';
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const dialogs = data.results || [];
+                        if (dialogs.length === 0) {
+                            statusText.textContent = '未找到频道或群组';
+                            return;
+                        }
+                        
+                        // 按类型分组并排序
+                        const channels = dialogs.filter(d => d.type === '频道').sort((a, b) => a.title.localeCompare(b.title));
+                        const groups = dialogs.filter(d => d.type === '超级群组' || d.type === '群组').sort((a, b) => a.title.localeCompare(b.title));
+                        
+                        // 添加频道选项组
+                        if (channels.length > 0) {
+                            const channelsOptgroup = document.createElement('optgroup');
+                            channelsOptgroup.label = '频道';
+                            
+                            channels.forEach(channel => {
+                                const option = document.createElement('option');
+                                option.value = `${channel.dialog_id || channel.id}|${channel.title}|${channel.type}`;
+                                option.textContent = channel.title;
+                                channelsOptgroup.appendChild(option);
+                            });
+                            
+                            dialogSelector.appendChild(channelsOptgroup);
+                        }
+                        
+                        // 添加群组选项组
+                        if (groups.length > 0) {
+                            const groupsOptgroup = document.createElement('optgroup');
+                            groupsOptgroup.label = '群组';
+                            
+                            groups.forEach(group => {
+                                const option = document.createElement('option');
+                                option.value = `${group.dialog_id || group.id}|${group.title}|${group.type}`;
+                                option.textContent = group.title;
+                                groupsOptgroup.appendChild(option);
+                            });
+                            
+                            dialogSelector.appendChild(groupsOptgroup);
+                        }
+                        
+                        // 显示来源信息
+                        if (data.from_cache) {
+                            statusText.textContent = `已从本地缓存加载 ${dialogs.length} 个频道和群组`;
+                        } else {
+                            statusText.textContent = `已从Telegram加载 ${dialogs.length} 个频道和群组`;
+                        }
+                    } else {
+                        statusText.textContent = `加载失败: ${data.error || '未知错误'}`;
+                    }
+                })
+                .catch(error => {
+                    console.error('加载失败:', error);
+                    statusText.textContent = '加载失败，请检查网络连接或确保Telegram客户端已启动';
+                });
+        }
+    });
+</script>
+{% endblock %} 

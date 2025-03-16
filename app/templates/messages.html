@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">转发消息历史</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th width="180">时间</th>
+                        <th>来源</th>
+                        <th>目标</th>
+                        <th>消息内容</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for msg in messages.items %}
+                    <tr>
+                        <td>{{ msg.forwarded_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>{{ channels.get(msg.source_channel_id, msg.source_channel_id) }}</td>
+                        <td>{{ channels.get(msg.destination_channel_id, msg.destination_channel_id) }}</td>
+                        <td>{{ msg.message_title }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center py-5 text-muted">
+                            暂无转发记录
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer">
+        <nav aria-label="分页">
+            <ul class="pagination justify-content-center mb-0">
+                {% if messages.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('main.message_history', page=messages.prev_num) }}">
+                        上一页
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">上一页</span>
+                </li>
+                {% endif %}
+                
+                {% for page_num in messages.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                    {% if page_num %}
+                        {% if page_num == messages.page %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                        {% else %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('main.message_history', page=page_num) }}">
+                                {{ page_num }}
+                            </a>
+                        </li>
+                        {% endif %}
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if messages.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('main.message_history', page=messages.next_num) }}">
+                        下一页
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">下一页</span>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endblock %} 

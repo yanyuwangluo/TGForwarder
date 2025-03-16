@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">服务状态</h5>
+                    <span class="badge status-badge {% if client_status == '运行中' %}status-running{% else %}status-stopped{% endif %}">
+                        {{ client_status }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button id="startBtn" class="btn btn-success {% if client_status == '运行中' %}d-none{% endif %}">
+                        启动服务
+                    </button>
+                    <button id="stopBtn" class="btn btn-danger {% if client_status != '运行中' %}d-none{% endif %}">
+                        停止服务
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">今日统计</h5>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-4 text-center">
+                        <h2 class="display-4">{{ today_count }}</h2>
+                        <p>今日转发</p>
+                    </div>
+                    <div class="col-8">
+                        <canvas id="hourlyChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">监听频道 ({{ source_channels|length }})</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    {% for channel in source_channels %}
+                    <div class="list-group-item">
+                        <h6 class="mb-1">{{ channel.channel_title }}</h6>
+                        <small class="text-muted">ID: {{ channel.channel_id }}</small>
+                    </div>
+                    {% else %}
+                    <div class="list-group-item text-center text-muted py-5">
+                        <p>暂未添加监听频道</p>
+                        <a href="{{ url_for('main.manage_channels') }}" class="btn btn-sm btn-outline-primary">
+                            添加频道
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">转发目标 ({{ destination_channels|length }})</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    {% for channel in destination_channels %}
+                    <div class="list-group-item">
+                        <h6 class="mb-1">{{ channel.channel_title }}</h6>
+                        <small class="text-muted">ID: {{ channel.channel_id }}</small>
+                    </div>
+                    {% else %}
+                    <div class="list-group-item text-center text-muted py-5">
+                        <p>暂未添加转发目标</p>
+                        <a href="{{ url_for('main.manage_channels') }}" class="btn btn-sm btn-outline-primary">
+                            添加频道
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">最近转发消息</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>来源</th>
+                        <th>目标</th>
+                        <th>消息内容</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for msg in recent_forwards %}
+                    <tr>
+                        <td>{{ msg.forwarded_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>{{ (channels[msg.source_channel_id] if msg.source_channel_id in channels else msg.source_channel_id) }}</td>
+                        <td>{{ (channels[msg.destination_channel_id] if msg.destination_channel_id in channels else msg.destination_channel_id) }}</td>
+                        <td>{{ msg.message_title }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center py-5 text-muted">
+                            暂无转发记录
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer text-end">
+        <a href="{{ url_for('main.message_history') }}" class="btn btn-sm btn-outline-primary">
+            查看更多
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 服务控制
+    document.getElementById('startBtn').addEventListener('click', function() {
+        fetch('/start_client', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('服务已启动');
+                    location.reload();
+                } else {
+                    alert('启动失败: ' + data.message);
+                }
+            });
+    });
+
+    document.getElementById('stopBtn').addEventListener('click', function() {
+        fetch('/stop_client', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('服务已停止');
+                    location.reload();
+                } else {
+                    alert('停止失败: ' + data.message);
+                }
+            });
+    });
+
+    // 图表
+    fetch('/stats')
+        .then(response => response.json())
+        .then(data => {
+            // 小时统计图表
+            const hourLabels = Array.from({length: 24}, (_, i) => `${i}:00`);
+            const hourData = Array(24).fill(0);
+            
+            data.hourly_stats.forEach(item => {
+                hourData[item.hour] = item.count;
+            });
+            
+            const ctx = document.getElementById('hourlyChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: hourLabels,
+                    datasets: [{
+                        label: '每小时转发数',
+                        data: hourData,
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        });
+</script>
+{% endblock %} 
