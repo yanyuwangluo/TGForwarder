@@ -126,7 +126,7 @@ docker run -d --name telerelay \
   -v ./.env:/app/.env \
   -v ./sessions:/app/sessions \
   --restart unless-stopped \
-  username/telerelay:latest
+  yanyuwangluo/telerelay:latest
 ```
 
 ### Docker配置说明
