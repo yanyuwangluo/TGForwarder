@@ -1,5 +1,5 @@
 telethon==1.31.1
-flask==2.0.1
+flask==2.2.5
 flask-sqlalchemy==2.5.1
 pyyaml==6.0
 werkzeug==2.0.3
