@@ -87,9 +87,9 @@ fi
 
 # 设置正确的权限
 log_info "设置目录权限..."
-chmod -R 755 /app/logs
-chmod -R 755 /app/sessions
-chmod -R 755 /app/instance
+chmod -R 777 /app/logs
+chmod -R 777 /app/sessions
+chmod -R 777 /app/instance
 
 # 处理Telegram登录
 log_info "正在检查Telegram登录配置..."
@@ -141,18 +141,14 @@ server:
   port: 5000
 
 flask:
-  database_uri: sqlite:///instance/telegram_forwarder.db
+  database_uri: sqlite:////app/telegram_forwarder.db
   secret_key: dev_key
 EOF
 
 # 初始化数据库
 log_info "正在初始化数据库..."
-python -c "
-from app import create_app, db
-app = create_app()
-with app.app_context():
-    db.create_all()
-"
+touch /app/telegram_forwarder.db
+chmod 666 /app/telegram_forwarder.db
 
 # 运行应用
 exec python app.py
