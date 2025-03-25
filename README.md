@@ -45,14 +45,23 @@
 
 ### Docker部署
 
-1. 构建并启动
+1. 启动
+##### 手机号必须包含国家代码和按照这个形式不能有空格，如+8613800138000
    ```bash
-   docker-compose up -d
+   mkdir telegram_forwarder
+   cd telegram_forwarder
+   touch config.yaml
+   docker run -it --name telerelay \
+   -p 5000:5000 \
+   -v $(pwd)/logs:/app/logs \
+   -v $(pwd)/sessions:/app/sessions \
+   -v $(pwd)/config.yaml:/app/config.yaml \
+   yanyuwangluo/telerelay:latest
    ```
 
 2. 查看日志
    ```bash
-   docker-compose logs -f
+   docker logs telerelay -f
    ```
 
 ## 功能使用指南
@@ -146,14 +155,22 @@ A Python-based Telegram channel forwarding tool that uses a regular user account
 
 ### Docker Deployment
 
-1. Build and start
+1. start
    ```bash
-   docker-compose up -d
+   mkdir telegram_forwarder
+   cd telegram_forwarder
+   touch config.yaml
+   docker run -it --name telerelay \
+   -p 5000:5000 \
+   -v $(pwd)/logs:/app/logs \
+   -v $(pwd)/sessions:/app/sessions \
+   -v $(pwd)/config.yaml:/app/config.yaml \
+   yanyuwangluo/telerelay:latest
    ```
 
 2. View logs
    ```bash
-   docker-compose logs -f
+   docker logs telerelay -f
    ```
 
 ## Feature Usage Guide
