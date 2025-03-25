@@ -52,10 +52,17 @@ done
 # 输入电话号码
 while true; do
   read -p "请输入您的电话号码(格式如 +8613800138000): " TG_PHONE
-  if [[ $TG_PHONE =~ ^\+[0-9]{10,15}$ ]]; then
+  # 移除所有空格
+  TG_PHONE=$(echo "$TG_PHONE" | tr -d ' ')
+  # 如果没有+号，添加+号
+  if [[ ! $TG_PHONE =~ ^\+ ]]; then
+    TG_PHONE="+$TG_PHONE"
+  fi
+  # 验证电话号码格式（允许更宽松的格式）
+  if [[ $TG_PHONE =~ ^\+[0-9]{8,15}$ ]]; then
     break
   else
-    echo -e "\033[31m错误：电话号码格式不正确\033[0m"
+    echo -e "\033[31m错误：电话号码格式不正确，请确保包含国家代码\033[0m"
   fi
 done
 
@@ -120,4 +127,21 @@ echo -e "3. 如需重新进入交互模式，请使用命令：\033[32mdocker at
 echo -e "\033[36m============================================\033[0m"
 echo
 
-exec python app.py --api-id "$TG_API_ID" --api-hash "$TG_API_HASH" --phone "$TG_PHONE"
+# 创建配置文件
+cat > /app/config.yaml << EOF
+telegram:
+  api_id: $TG_API_ID
+  api_hash: $TG_API_HASH
+  phone: "$TG_PHONE"
+  session_name: ""
+
+server:
+  port: 5000
+
+flask:
+  database_uri: sqlite:///data/telegram_forwarder.db
+  secret_key: dev_key
+EOF
+
+# 运行应用
+exec python app.py
