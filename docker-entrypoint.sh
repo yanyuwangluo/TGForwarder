@@ -139,7 +139,7 @@ server:
   port: 5000
 
 flask:
-  database_uri: sqlite:///data/telegram_forwarder.db
+  database_uri: sqlite:///app/telegram_forwarder.db
   secret_key: dev_key
 EOF
 
