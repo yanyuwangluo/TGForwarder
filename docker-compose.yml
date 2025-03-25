@@ -17,4 +17,3 @@ services:
       - TG_PHONE=${TG_PHONE:-}         # 电话号码
     stdin_open: true  # 启用标准输入
     tty: true         # 分配伪终端
-    command: python app.py

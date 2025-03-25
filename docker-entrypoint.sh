@@ -76,9 +76,6 @@ log_info "Telegram配置处理完成，准备启动应用..."
 # 捕获终止信号
 trap 'log_info "接收到终止信号，正在关闭应用..."; exit 0' SIGTERM SIGINT
 
-# 运行应用配置参数
-CMD_ARGS="--api-id $TG_API_ID --api-hash $TG_API_HASH --phone $TG_PHONE"
-
 # 运行应用
-log_info "启动应用，使用以下参数: $CMD_ARGS"
-exec "$@" $CMD_ARGS
+log_info "启动应用..."
+exec python app.py --api-id "$TG_API_ID" --api-hash "$TG_API_HASH" --phone "$TG_PHONE"
