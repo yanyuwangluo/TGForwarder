@@ -18,6 +18,7 @@ log_error() {
 log_info "正在检查并创建必要的目录..."
 mkdir -p /app/logs
 mkdir -p /app/sessions
+mkdir -p /app/instance
 
 # 显示欢迎信息
 echo -e "\033[36m============================================\033[0m"
@@ -88,6 +89,7 @@ fi
 log_info "设置目录权限..."
 chmod -R 755 /app/logs
 chmod -R 755 /app/sessions
+chmod -R 755 /app/instance
 
 # 处理Telegram登录
 log_info "正在检查Telegram登录配置..."
@@ -139,7 +141,7 @@ server:
   port: 5000
 
 flask:
-  database_uri: sqlite:///app/telegram_forwarder.db
+  database_uri: sqlite:///instance/telegram_forwarder.db
   secret_key: dev_key
 EOF
 
