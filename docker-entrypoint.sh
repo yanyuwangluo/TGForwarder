@@ -145,5 +145,14 @@ flask:
   secret_key: dev_key
 EOF
 
+# 初始化数据库
+log_info "正在初始化数据库..."
+python -c "
+from app import create_app, db
+app = create_app()
+with app.app_context():
+    db.create_all()
+"
+
 # 运行应用
 exec python app.py
