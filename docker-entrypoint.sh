@@ -20,69 +20,100 @@ mkdir -p /app/logs
 mkdir -p /app/sessions
 mkdir -p /app/instance
 
-# 显示欢迎信息
-echo -e "\033[36m============================================\033[0m"
-echo -e "\033[36m        Telegram 转发器配置向导\033[0m"
-echo -e "\033[36m============================================\033[0m"
-echo
-
-# 交互式输入配置
-log_info "请输入Telegram API配置信息"
-echo
-
-# 输入API ID
-while true; do
-  read -p "请输入您的Telegram API ID: " TG_API_ID
-  if [[ $TG_API_ID =~ ^[0-9]+$ ]]; then
-    break
-  else
-    echo -e "\033[31m错误：API ID必须是数字\033[0m"
+# 检查是否存在配置文件
+if [ -f "/app/config.yaml" ]; then
+  log_info "发现已存在的配置文件，正在读取..."
+  # 从配置文件读取API ID
+  TG_API_ID=$(grep "api_id:" /app/config.yaml | awk '{print $2}')
+  # 从配置文件读取API Hash
+  TG_API_HASH=$(grep "api_hash:" /app/config.yaml | awk '{print $2}')
+  # 从配置文件读取电话号码
+  TG_PHONE=$(grep "phone:" /app/config.yaml | awk '{print $2}' | tr -d '"')
+  
+  echo -e "\033[36m============================================\033[0m"
+  echo -e "\033[36m              已保存的配置\033[0m"
+  echo -e "\033[36m============================================\033[0m"
+  echo -e "API ID: \033[32m$TG_API_ID\033[0m"
+  echo -e "API Hash: \033[32m$TG_API_HASH\033[0m"
+  echo -e "电话号码: \033[32m$TG_PHONE\033[0m"
+  echo -e "\033[36m============================================\033[0m"
+  echo
+  
+  read -p "是否使用已保存的配置？(y/n): " use_saved
+  if [[ $use_saved != "y" ]]; then
+    # 如果不使用保存的配置，继续交互式输入
+    TG_API_ID=""
+    TG_API_HASH=""
+    TG_PHONE=""
   fi
-done
+fi
 
-# 输入API Hash
-while true; do
-  read -p "请输入您的Telegram API Hash: " TG_API_HASH
-  if [[ $TG_API_HASH =~ ^[a-f0-9]{32}$ ]]; then
-    break
-  else
-    echo -e "\033[31m错误：API Hash必须是32位十六进制字符\033[0m"
+# 如果没有配置信息，进行交互式输入
+if [ -z "$TG_API_ID" ]; then
+  # 显示欢迎信息
+  echo -e "\033[36m============================================\033[0m"
+  echo -e "\033[36m        Telegram 转发器配置向导\033[0m"
+  echo -e "\033[36m============================================\033[0m"
+  echo
+
+  # 交互式输入配置
+  log_info "请输入Telegram API配置信息"
+  echo
+
+  # 输入API ID
+  while true; do
+    read -p "请输入您的Telegram API ID: " TG_API_ID
+    if [[ $TG_API_ID =~ ^[0-9]+$ ]]; then
+      break
+    else
+      echo -e "\033[31m错误：API ID必须是数字\033[0m"
+    fi
+  done
+
+  # 输入API Hash
+  while true; do
+    read -p "请输入您的Telegram API Hash: " TG_API_HASH
+    if [[ $TG_API_HASH =~ ^[a-f0-9]{32}$ ]]; then
+      break
+    else
+      echo -e "\033[31m错误：API Hash必须是32位十六进制字符\033[0m"
+    fi
+  done
+
+  # 输入电话号码
+  while true; do
+    read -p "请输入您的电话号码(格式如 +8613800138000): " TG_PHONE
+    # 移除所有空格
+    TG_PHONE=$(echo "$TG_PHONE" | tr -d ' ')
+    # 如果没有+号，添加+号
+    if [[ ! $TG_PHONE =~ ^\+ ]]; then
+      TG_PHONE="+$TG_PHONE"
+    fi
+    # 验证电话号码格式（允许更宽松的格式）
+    if [[ $TG_PHONE =~ ^\+[0-9]{8,15}$ ]]; then
+      break
+    else
+      echo -e "\033[31m错误：电话号码格式不正确，请确保包含国家代码\033[0m"
+    fi
+  done
+
+  # 显示配置信息
+  echo
+  echo -e "\033[36m============================================\033[0m"
+  echo -e "\033[36m              配置信息确认\033[0m"
+  echo -e "\033[36m============================================\033[0m"
+  echo -e "API ID: \033[32m$TG_API_ID\033[0m"
+  echo -e "API Hash: \033[32m$TG_API_HASH\033[0m"
+  echo -e "电话号码: \033[32m$TG_PHONE\033[0m"
+  echo -e "\033[36m============================================\033[0m"
+  echo
+
+  # 确认配置
+  read -p "确认以上配置信息是否正确？(y/n): " confirm
+  if [[ $confirm != "y" ]]; then
+    echo -e "\033[31m配置已取消，容器将退出\033[0m"
+    exit 1
   fi
-done
-
-# 输入电话号码
-while true; do
-  read -p "请输入您的电话号码(格式如 +8613800138000): " TG_PHONE
-  # 移除所有空格
-  TG_PHONE=$(echo "$TG_PHONE" | tr -d ' ')
-  # 如果没有+号，添加+号
-  if [[ ! $TG_PHONE =~ ^\+ ]]; then
-    TG_PHONE="+$TG_PHONE"
-  fi
-  # 验证电话号码格式（允许更宽松的格式）
-  if [[ $TG_PHONE =~ ^\+[0-9]{8,15}$ ]]; then
-    break
-  else
-    echo -e "\033[31m错误：电话号码格式不正确，请确保包含国家代码\033[0m"
-  fi
-done
-
-# 显示配置信息
-echo
-echo -e "\033[36m============================================\033[0m"
-echo -e "\033[36m              配置信息确认\033[0m"
-echo -e "\033[36m============================================\033[0m"
-echo -e "API ID: \033[32m$TG_API_ID\033[0m"
-echo -e "API Hash: \033[32m$TG_API_HASH\033[0m"
-echo -e "电话号码: \033[32m$TG_PHONE\033[0m"
-echo -e "\033[36m============================================\033[0m"
-echo
-
-# 确认配置
-read -p "确认以上配置信息是否正确？(y/n): " confirm
-if [[ $confirm != "y" ]]; then
-  echo -e "\033[31m配置已取消，容器将退出\033[0m"
-  exit 1
 fi
 
 # 设置正确的权限
