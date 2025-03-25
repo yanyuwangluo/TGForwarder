@@ -30,26 +30,11 @@ if [ -f "/app/config.yaml" ]; then
   # 从配置文件读取电话号码
   TG_PHONE=$(grep "phone:" /app/config.yaml | awk '{print $2}' | tr -d '"')
   
-  echo -e "\033[36m============================================\033[0m"
-  echo -e "\033[36m              已保存的配置\033[0m"
-  echo -e "\033[36m============================================\033[0m"
-  echo -e "API ID: \033[32m$TG_API_ID\033[0m"
-  echo -e "API Hash: \033[32m$TG_API_HASH\033[0m"
-  echo -e "电话号码: \033[32m$TG_PHONE\033[0m"
-  echo -e "\033[36m============================================\033[0m"
-  echo
-  
-  read -p "是否使用已保存的配置？(y/n): " use_saved
-  if [[ $use_saved != "y" ]]; then
-    # 如果不使用保存的配置，继续交互式输入
-    TG_API_ID=""
-    TG_API_HASH=""
-    TG_PHONE=""
-  fi
-fi
-
-# 如果没有配置信息，进行交互式输入
-if [ -z "$TG_API_ID" ]; then
+  log_info "已加载保存的配置信息"
+  log_info "API ID: $TG_API_ID"
+  log_info "API Hash: $TG_API_HASH"
+  log_info "电话号码: $TG_PHONE"
+else
   # 显示欢迎信息
   echo -e "\033[36m============================================\033[0m"
   echo -e "\033[36m        Telegram 转发器配置向导\033[0m"
