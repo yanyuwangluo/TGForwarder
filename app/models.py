@@ -21,6 +21,21 @@ class Channel(db.Model):
     def __repr__(self):
         return f'<Channel {self.channel_title}>'
 
+class ForwardRule(db.Model):
+    """转发规则：定义从哪个源频道转发到哪个目标频道"""
+    id = db.Column(db.Integer, primary_key=True)
+    source_channel_id = db.Column(db.Integer, db.ForeignKey('channel.id'), nullable=False)  # 源频道ID
+    destination_channel_id = db.Column(db.Integer, db.ForeignKey('channel.id'), nullable=False)  # 目标频道ID
+    is_active = db.Column(db.Boolean, default=True)  # 规则是否激活
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # 关联到Channel表
+    source_channel = db.relationship('Channel', foreign_keys=[source_channel_id], backref='source_rules')
+    destination_channel = db.relationship('Channel', foreign_keys=[destination_channel_id], backref='destination_rules')
+    
+    def __repr__(self):
+        return f'<ForwardRule {self.source_channel.channel_title} -> {self.destination_channel.channel_title}>'
+
 class ForwardedMessage(db.Model):
     """已转发的消息记录"""
     id = db.Column(db.Integer, primary_key=True)

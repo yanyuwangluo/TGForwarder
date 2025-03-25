@@ -95,6 +95,55 @@
     </div>
 </div>
 
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">活跃转发规则 ({{ active_rules|length }})</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if active_rules %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>源频道</th>
+                                <th></th>
+                                <th>目标频道</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rule in active_rules %}
+                            <tr>
+                                <td>{{ rule.source_channel.channel_title }}</td>
+                                <td><i class="bi bi-arrow-right"></i></td>
+                                <td>{{ rule.destination_channel.channel_title }}</td>
+                                <td>{{ rule.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    <a href="{{ url_for('main.manage_rules') }}" class="btn btn-sm btn-outline-primary">
+                                        管理规则
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <p>没有活跃的转发规则</p>
+                    <a href="{{ url_for('main.manage_rules') }}" class="btn btn-sm btn-outline-primary">
+                        添加转发规则
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="card mb-4">
     <div class="card-header bg-primary text-white">
         <h5 class="mb-0">最近转发消息</h5>
@@ -112,11 +161,18 @@
                 </thead>
                 <tbody>
                     {% for msg in recent_forwards %}
-                    <tr>
-                        <td>{{ msg.forwarded_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <tr {% if '[转发失败]' in msg.message_title %}class="table-danger"{% endif %}>
+                        <td>{{ to_beijing_time(msg.forwarded_at).strftime('%Y-%m-%d %H:%M:%S') }}</td>
                         <td>{{ (channels[msg.source_channel_id] if msg.source_channel_id in channels else msg.source_channel_id) }}</td>
                         <td>{{ (channels[msg.destination_channel_id] if msg.destination_channel_id in channels else msg.destination_channel_id) }}</td>
-                        <td>{{ msg.message_title }}</td>
+                        <td>
+                            {% if '[转发失败]' in msg.message_title %}
+                            <i class="bi bi-exclamation-triangle-fill text-danger"></i> 
+                            <span class="text-danger">{{ msg.message_title }}</span>
+                            {% else %}
+                            {{ msg.message_title }}
+                            {% endif %}
+                        </td>
                     </tr>
                     {% else %}
                     <tr>

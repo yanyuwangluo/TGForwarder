@@ -27,13 +27,17 @@ COPY . .
 RUN chmod +x docker-entrypoint.sh
 
 # 创建必要目录
-RUN mkdir -p /app/logs /app/data /app/sessions
+RUN mkdir -p /app/logs /app/sessions
 
 # 暴露端口
 EXPOSE 5000
+
+# 设置环境变量
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
 # 设置入口点
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # 启动应用
-CMD ["python", "app.py"] 
+CMD ["python", "app.py"]

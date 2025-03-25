@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">转发规则管理</h1>
+        
+        <!-- 闪现消息 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <!-- 创建新规则 -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">添加新转发规则</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('main.add_rule') }}" method="post">
+                    <div class="row mb-3">
+                        <div class="col-md-5">
+                            <label for="source_id" class="form-label">源频道 (从这里监听)</label>
+                            <select class="form-select" id="source_id" name="source_id" required>
+                                <option value="">-- 选择监听源 --</option>
+                                {% for channel in source_channels %}
+                                <option value="{{ channel.id }}">{{ channel.channel_title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-center justify-content-center pt-3">
+                            <i class="bi bi-arrow-right fs-4"></i>
+                        </div>
+                        <div class="col-md-5">
+                            <label for="destination_id" class="form-label">目标频道 (转发到这里)</label>
+                            <select class="form-select" id="destination_id" name="destination_id" required>
+                                <option value="">-- 选择转发目标 --</option>
+                                {% for channel in destination_channels %}
+                                <option value="{{ channel.id }}">{{ channel.channel_title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary">添加规则</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- 现有规则列表 -->
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">现有转发规则</h5>
+            </div>
+            <div class="card-body">
+                {% if rules %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>源频道</th>
+                                <th></th>
+                                <th>目标频道</th>
+                                <th>状态</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rule in rules %}
+                            <tr>
+                                <td>{{ rule.source_channel.channel_title }}</td>
+                                <td><i class="bi bi-arrow-right"></i></td>
+                                <td>{{ rule.destination_channel.channel_title }}</td>
+                                <td>
+                                    {% if rule.is_active %}
+                                    <span class="badge bg-success">已启用</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">已禁用</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ rule.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    <div class="btn-group">
+                                        <form action="{{ url_for('main.toggle_rule', rule_id=rule.id) }}" method="post">
+                                            <button type="submit" class="btn btn-sm btn-outline-{{ 'warning' if rule.is_active else 'success' }}">
+                                                {% if rule.is_active %}
+                                                禁用
+                                                {% else %}
+                                                启用
+                                                {% endif %}
+                                            </button>
+                                        </form>
+                                        <form action="{{ url_for('main.delete_rule', rule_id=rule.id) }}" method="post" onsubmit="return confirm('确定要删除这个规则吗？');">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger ms-2">删除</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <p class="text-muted">当前没有转发规则。请添加新的规则。</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 表单提交前验证
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const sourceId = document.getElementById('source_id').value;
+        const destId = document.getElementById('destination_id').value;
+        
+        if (!sourceId || !destId) {
+            e.preventDefault();
+            alert('请选择源频道和目标频道');
+            return false;
+        }
+        
+        if (sourceId === destId) {
+            e.preventDefault();
+            alert('源频道和目标频道不能相同');
+            return false;
+        }
+    });
+</script>
+{% endblock %} 

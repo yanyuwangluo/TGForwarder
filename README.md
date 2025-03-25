@@ -1,96 +1,137 @@
 # TeleRelay（电报中继）
 
-这是一个基于Python的Telegram频道转发工具，使用普通用户账号（非机器人）来监听指定频道并将消息转发到其他频道。
+基于Python的Telegram频道转发工具，使用普通用户账号（非机器人）来监听指定频道并将消息转发到其他频道。
 
-[English README](README_EN.md)
+[English Version](#english-version)
 
 ## 主要功能
 
-- 监听多个Telegram频道
-- 将消息转发到多个目标频道
-- 通过Web界面进行管理
-- 查看转发历史和统计数据
-- 显示当天转发的消息数量
-- 缓存对话列表到本地数据库
-- 日志系统，支持文件轮转
-- 自定义端口运行
-- Docker支持，方便部署
-- GitHub Actions自动构建
+- **高效转发**: 自动监听指定频道并转发消息
+- **Web界面管理**: 可视化配置转发规则与频道
+- **频道搜索**: 快速从大量频道中筛选特定频道
+- **实时错误监控**: 
+  - 转发失败实时通知
+  - 错误日志专用页面
+  - 浏览器桌面通知
+  - 导航栏错误计数提醒
+- **北京时间显示**: 所有时间戳自动转换为北京时间
+- **完善的日志系统**: 便于故障排查与监控
 
 ## 安装与配置
 
-### 1. 安装依赖
+### 基本安装
 
-```bash
-pip install -r requirements.txt
-```
-
-### 2. 配置环境变量
-
-复制`.env.example`文件为`.env`，并填写以下信息：
-
-```
-# Telegram API配置
-API_ID=你的API_ID
-API_HASH=你的API_HASH
-PHONE=你的电话号码（包含国家代码，如+8613800138000）
-
-# Flask配置 
-SECRET_KEY=你的秘钥
-DATABASE_URI=sqlite:///telegram_forwarder.db
-
-# 可选配置
-PORT=5000  # Web服务端口，默认5000
-```
-
-关于API_ID和API_HASH：
-1. 访问 https://my.telegram.org/ 并登录
-2. 前往 "API development tools"
-3. 创建一个新应用程序，获取API_ID和API_HASH
-
-### 3. 运行应用
-
-标准启动：
-```bash
-python app.py
-```
-
-指定端口启动：
-```bash
-# 方法1：通过命令行参数
-python app.py 8080
-
-# 方法2：通过环境变量
-PORT=8080 python app.py
-```
-
-应用将在指定端口上启动，默认为 http://127.0.0.1:5000。使用自定义端口时，访问地址相应变更。
-
-## Docker部署
-
-项目支持Docker部署，提供更简单的安装和管理方式。
-
-### 准备工作
-
-1. 安装Docker和Docker Compose
-2. 配置`.env`文件（与上述配置相同）
-3. 可选：添加Telegram自动登录配置
-
-### Telegram自动登录配置
-
-在`.env`文件中添加以下配置可实现无需交互自动登录：
-
-```
-# Telegram登录配置
-TG_2FA_PASSWORD=your_2fa_password  # 如果启用了二次验证，填写密码
-TG_ALWAYS_CONFIRM=true  # 自动确认服务条款
-```
-
-当收到Telegram验证码时，有两种方式处理：
-
-1. **临时方式**：启动容器后，查看日志获取验证码提示，然后将容器停止，并通过环境变量传入验证码重新启动：
+1. 安装依赖
    ```bash
-   TG_LOGIN_CODE=12345 docker-compose up -d
+   pip install -r requirements.txt
+   ```
+
+2. 配置YAML文件  
+   编辑项目根目录下的`config.yaml`文件:
+   ```yaml
+   telegram:
+     api_id: 你的API_ID
+     api_hash: 你的API_HASH
+     phone: 你的电话号码（如+8613800138000）
+   
+   server:
+     port: 5000  # Web服务端口
+   ```
+
+3. 运行应用
+   ```bash
+   python app.py
+   ```
+
+### Docker部署
+
+1. 构建并启动
+   ```bash
+   docker-compose up -d
+   ```
+
+2. 查看日志
+   ```bash
+   docker-compose logs -f
+   ```
+
+## 功能使用指南
+
+### 基本操作流程
+
+1. **首次登录**: 验证您的Telegram账号
+2. **管理频道**: 
+   - 进入"频道管理"页面
+   - 使用"同步所有对话"获取频道列表
+   - 使用搜索功能快速找到特定频道
+   - 设置频道为"监听源"或"转发目标"
+3. **创建转发规则**: 在"转发规则"页面创建规则
+4. **启动服务**: 点击"启动服务"开始自动转发
+5. **监控错误**: 通过错误日志页面查看转发问题
+
+### 错误通知系统
+
+- **实时通知**: 转发失败时页面顶部显示通知
+- **错误日志页面**: 集中查看所有历史错误
+- **桌面通知**: 页面不可见时发送浏览器通知
+- **错误计数**: 导航栏显示未读错误数量
+
+## 常见问题
+
+1. **获取API_ID和API_HASH**:
+   - 访问 https://my.telegram.org/
+   - 登录后前往"API development tools"
+   - 创建一个新应用获取凭证
+
+2. **无法连接Telegram**:
+   - 检查API_ID和API_HASH是否正确
+   - 确认网络连接正常
+   - 查看logs/error.log了解详细错误信息
+
+3. **转发失败原因**:
+   - 未加入源频道或目标频道
+   - 源频道禁止转发
+   - 在目标频道缺少发送权限
+   - 详细原因会显示在错误日志中
+
+4. **频道ID格式问题**:
+   - 频道ID通常为`-100xxxxxxxxx`
+   - 也可以使用`@username`格式
+
+## 许可证
+
+本项目采用MIT许可证。
+
+版权所有 (c) 2023-2025 烟雨 (www.yanyuwangluo.cn)
+
+---
+
+# English Version
+
+# TeleRelay
+
+A Python-based Telegram channel forwarding tool that uses a regular user account (not a bot) to monitor specified channels and forward messages to other channels.
+
+## Key Features
+
+- **Efficient Forwarding**: Automatically monitor and forward messages from specified channels
+- **Web Interface**: Visual configuration of forwarding rules and channels
+- **Channel Search**: Quickly filter specific channels from a large number of channels
+- **Real-time Error Monitoring**: 
+  - Instant notifications for forwarding failures
+  - Dedicated error log page
+  - Browser desktop notifications
+  - Error count alerts in navigation bar
+- **Beijing Time Display**: All timestamps automatically converted to Beijing time
+- **Comprehensive Logging System**: For easy troubleshooting and monitoring
+
+## Installation and Configuration
+
+### Basic Installation
+
+1. Install dependencies
+   ```bash
+   pip install -r requirements.txt
    ```
 
 2. **持久方式**：将验证码提前写入`.env`文件：

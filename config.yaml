@@ -1,0 +1,10 @@
+flask:
+  database_uri: sqlite:///telegram_forwarder.db
+  secret_key: dev_key
+server:
+  port: 5000
+telegram:
+  api_hash: 
+  api_id: 
+  phone: 
+  session_name: ''

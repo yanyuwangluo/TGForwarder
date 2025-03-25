@@ -7,33 +7,38 @@
 import os
 import asyncio
 import logging
+import yaml
 from flask import Flask
-from dotenv import load_dotenv
+# 从dotenv import load_dotenv
 from app.models import db
 from app.telegram_client import init_telegram_client
 
 # 获取应用日志记录器
 logger = logging.getLogger('app')
 
-# 加载环境变量
-load_dotenv()
+# 加载配置文件
+def load_config():
+    # 修改为从项目根目录加载配置文件
+    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.yaml')
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+# load_dotenv()
 
 def create_app():
     """创建并配置Flask应用"""
     app = Flask(__name__)
     
+    # 加载配置
+    config = load_config()
+    
     # 配置
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_key')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'sqlite:///telegram_forwarder.db')
+    app.config['SECRET_KEY'] = config['flask']['secret_key']
+    app.config['SQLALCHEMY_DATABASE_URI'] = config['flask']['database_uri']
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     # 初始化数据库
     db.init_app(app)
-    
-    # 初始化Telegram客户端
-    api_id = os.getenv('API_ID')
-    api_hash = os.getenv('API_HASH')
-    phone = os.getenv('PHONE')
     
     # 注册蓝图
     from app.routes import main_bp

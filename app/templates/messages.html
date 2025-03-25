@@ -18,11 +18,18 @@
                 </thead>
                 <tbody>
                     {% for msg in messages.items %}
-                    <tr>
-                        <td>{{ msg.forwarded_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <tr {% if '[转发失败]' in msg.message_title %}class="table-danger"{% endif %}>
+                        <td>{{ to_beijing_time(msg.forwarded_at).strftime('%Y-%m-%d %H:%M:%S') }}</td>
                         <td>{{ channels.get(msg.source_channel_id, msg.source_channel_id) }}</td>
                         <td>{{ channels.get(msg.destination_channel_id, msg.destination_channel_id) }}</td>
-                        <td>{{ msg.message_title }}</td>
+                        <td>
+                            {% if '[转发失败]' in msg.message_title %}
+                            <i class="bi bi-exclamation-triangle-fill text-danger"></i> 
+                            <span class="text-danger">{{ msg.message_title }}</span>
+                            {% else %}
+                            {{ msg.message_title }}
+                            {% endif %}
+                        </td>
                     </tr>
                     {% else %}
                     <tr>

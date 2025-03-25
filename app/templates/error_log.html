@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header bg-danger text-white">
+        <h5 class="mb-0"><i class="bi bi-exclamation-triangle-fill"></i> 转发错误日志</h5>
+    </div>
+    <div class="card-body">
+        {% if errors.items %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>来源</th>
+                            <th>目标</th>
+                            <th>错误详情</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for error in errors.items %}
+                            <tr>
+                                <td>{{ to_beijing_time(error.forwarded_at).strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                <td>
+                                    {% if error.source_channel_id in channels %}
+                                        {{ channels[error.source_channel_id] }}
+                                    {% else %}
+                                        未知频道 ({{ error.source_channel_id }})
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if error.destination_channel_id in channels %}
+                                        {{ channels[error.destination_channel_id] }}
+                                    {% else %}
+                                        未知频道 ({{ error.destination_channel_id }})
+                                    {% endif %}
+                                </td>
+                                <td>{{ error.message_title.replace('[转发失败] ', '') }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- 分页控件 -->
+            <nav aria-label="错误日志分页">
+                <ul class="pagination justify-content-center">
+                    {% if errors.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('main.error_log', page=errors.prev_num) }}">
+                                <i class="bi bi-chevron-left"></i> 上一页
+                            </a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="bi bi-chevron-left"></i> 上一页</span>
+                        </li>
+                    {% endif %}
+                    
+                    {% for page_num in errors.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                        {% if page_num %}
+                            {% if page_num == errors.page %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ page_num }}</span>
+                                </li>
+                            {% else %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('main.error_log', page=page_num) }}">
+                                        {{ page_num }}
+                                    </a>
+                                </li>
+                            {% endif %}
+                        {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">...</span>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if errors.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('main.error_log', page=errors.next_num) }}">
+                                下一页 <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">下一页 <i class="bi bi-chevron-right"></i></span>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        {% else %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle-fill"></i> 目前没有记录到转发错误。
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="text-center mb-4">
+    <a href="{{ url_for('main.index') }}" class="btn btn-secondary me-2">
+        <i class="bi bi-arrow-left"></i> 返回首页
+    </a>
+    <button id="clearDismissedErrors" class="btn btn-outline-danger">
+        <i class="bi bi-x-circle"></i> 重置错误通知状态
+    </button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('clearDismissedErrors').addEventListener('click', function() {
+        // 清除localStorage中的已关闭错误记录
+        localStorage.removeItem('dismissedErrors');
+        alert('已重置错误通知状态，所有之前关闭的错误通知将再次显示。');
+    });
+</script>
+{% endblock %} 

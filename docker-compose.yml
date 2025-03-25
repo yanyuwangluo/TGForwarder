@@ -2,19 +2,19 @@ version: '3'
 
 services:
   telerelay:
-    build: .
+    image: yanyuwangluo/telerelay:latest
     container_name: telerelay
     restart: unless-stopped
     ports:
       - "${PORT:-5000}:5000"
     volumes:
-      - ./logs:/app/logs         # 日志文件映射
-      - ./data:/app/data         # 数据目录映射
-      - ./.env:/app/.env         # 配置文件映射
-      - ./sessions:/app/sessions # Telegram会话文件映射
+      - ./logs:/app/logs               # 日志文件映射
+      - ./sessions:/app/sessions       # Telegram会话文件映射
     environment:
-      - TZ=Asia/Shanghai
-      - TG_LOGIN_CODE=${TG_LOGIN_CODE:-}  # 如果需要传递验证码
-      - TG_2FA_PASSWORD=${TG_2FA_PASSWORD:-}  # 如果需要传递二次验证密码
-      - TG_ALWAYS_CONFIRM=${TG_ALWAYS_CONFIRM:-false}  # 是否自动确认
-    command: python app.py 
+      - TZ=Asia/Shanghai               # 设置时区
+      - TG_API_ID=${TG_API_ID:-}       # Telegram API ID
+      - TG_API_HASH=${TG_API_HASH:-}   # Telegram API Hash
+      - TG_PHONE=${TG_PHONE:-}         # 电话号码
+    stdin_open: true  # 启用标准输入
+    tty: true         # 分配伪终端
+    command: python app.py

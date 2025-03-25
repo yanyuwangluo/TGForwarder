@@ -9,14 +9,22 @@ import os
 import asyncio
 import logging
 import traceback
+import yaml
 from datetime import datetime
 from telethon import TelegramClient, events
 from telethon.tl.types import PeerChannel, Channel as TelegramChannel
-from app.models import db, Channel, ForwardedMessage, Dialog
+from app.models import db, Channel, ForwardedMessage, Dialog, ForwardRule
 from flask import current_app
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# 加载配置文件
+def load_config():
+    # 修改为从项目根目录加载配置文件
+    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.yaml')
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
 
 class TelegramForwarder:
     def __init__(self, api_id, api_hash, phone):
@@ -28,6 +36,7 @@ class TelegramForwarder:
         self.loop = None
         self._handlers_registered = False
         self.app = None  # 存储Flask应用实例
+        self.config = load_config()['telegram']
         
     async def start(self):
         """启动Telegram客户端"""
@@ -35,8 +44,14 @@ class TelegramForwarder:
             logger.debug("准备启动Telegram客户端")
             
             # 获取会话名称
-            session_name = os.getenv('TG_SESSION_NAME', self.phone)
+            session_name = self.config.get('session_name', '')
+            if not session_name:
+                session_name = str(self.phone)
+            # 清理会话名称中的特殊字符
+            session_name = ''.join(c for c in session_name if c.isalnum() or c in '_-')
+            
             session_path = f"sessions/{session_name}"
+            logger.debug(f"使用会话路径: {session_path}")
             
             # 创建会话目录
             os.makedirs("sessions", exist_ok=True)
@@ -44,64 +59,11 @@ class TelegramForwarder:
             # 初始化客户端
             self.client = TelegramClient(session_path, self.api_id, self.api_hash)
             
-            # 登录选项
-            login_2fa_password = os.getenv('TG_2FA_PASSWORD', '')  # 二次验证密码
-            login_code = os.getenv('TG_LOGIN_CODE', '')  # 预设的登录验证码
-            always_confirm = os.getenv('TG_ALWAYS_CONFIRM', 'false').lower() == 'true'  # 是否总是自动确认
-            
-            # 自定义登录过程的回调函数
-            async def custom_login_callback(login_event):
-                logger.debug(f"收到登录事件: {login_event.__class__.__name__}")
-                
-                # 如果是密码请求（二次验证）
-                if login_event.__class__.__name__ == 'PasswordHashInvalidEvent':
-                    logger.error("二次验证密码无效")
-                    return None
-                elif login_event.__class__.__name__ == 'Password':
-                    # 如果设置了二次验证密码，则使用它
-                    if login_2fa_password:
-                        logger.info("使用配置文件中的二次验证密码")
-                        return login_2fa_password
-                    logger.info("需要二次验证密码，请在控制台输入")
-                    return None  # 返回None将使用默认处理方式（交互式输入）
-                    
-                # 如果是登录码请求
-                elif login_event.__class__.__name__ == 'PhoneCodeEvent':
-                    logger.error("提供的登录验证码无效")
-                    return None
-                elif login_event.__class__.__name__ == 'PhoneCode':
-                    # 如果设置了登录码，则使用它
-                    if login_code:
-                        logger.info("使用配置文件中的登录验证码")
-                        return login_code
-                    logger.info("需要登录验证码，请查看Telegram消息并在控制台输入")
-                    return None  # 返回None将使用默认处理方式（交互式输入）
-                    
-                # 如果是是否确认登录请求
-                elif login_event.__class__.__name__ == 'TermsOfService':
-                    if always_confirm:
-                        logger.info("自动接受服务条款")
-                        return True
-                    logger.info("需要确认Telegram服务条款，请在控制台确认")
-                    return None  # 返回None将使用默认处理方式（交互式输入）
-                    
-                # 处理其他登录事件
-                elif login_event.__class__.__name__ == 'LoginToken':
-                    logger.info("收到登录令牌请求，目前不支持自动处理，请手动操作")
-                    return None
-                    
-                # 默认返回None，使用默认的交互式处理
-                return None
-                
-            # 启动客户端，设置自定义登录处理
+            # 启动客户端，不设置自定义登录处理，使用默认的交互式处理
             try:
                 logger.debug("开始连接Telegram服务器")
-                await self.client.start(
-                    phone=self.phone, 
-                    code_callback=custom_login_callback,
-                    password_callback=custom_login_callback,
-                    first_name="TeleRelay", last_name="Bot"
-                )
+                # 使用默认的交互式处理方式，将直接提示用户在控制台输入验证码和二次验证密码
+                await self.client.start(phone=self.phone)
                 
                 if not self.client.is_connected():
                     logger.error("客户端连接失败")
@@ -117,8 +79,12 @@ class TelegramForwarder:
                     self._handlers_registered = True
                 
                 # 获取客户端信息
-                me = await self.client.get_me()
-                logger.info(f"登录账号: {me.first_name} {getattr(me, 'last_name', '')} (@{me.username})")
+                try:
+                    me = await self.client.get_me()
+                    logger.info(f"登录账号: {me.first_name} {getattr(me, 'last_name', '')} (@{me.username})")
+                except Exception as e:
+                    logger.error(f"获取账号信息失败: {e}")
+                    # 但不影响客户端使用
                 
                 return True
             except Exception as e:
@@ -571,73 +537,187 @@ class TelegramForwarder:
                         logger.debug(f"频道 {chat_id} 不是监听源，忽略消息")
                         return
                     
-                    # 保存源频道名称，避免后续会话分离问题
+                    # 保存源频道名称和ID，避免后续会话分离问题
                     source_channel_title = source_channel.channel_title
+                    source_channel_id = source_channel.id
                     logger.info(f"收到来自监听源的消息: {source_channel_title}")
-                        
-                    # 获取所有转发目标
-                    destinations = Channel.query.filter_by(is_destination=True).all()
-                    if not destinations:
-                        logger.debug("没有配置转发目标，忽略消息")
-                        return
-                        
+                    
                     # 获取消息内容作为标题
                     message_text = event.message.message
                     message_title = message_text[:100] if message_text else "无文本内容"
                     logger.debug(f"消息内容: {message_title[:50]}{'...' if len(message_title) > 50 else ''}")
                     
-                    # 先提取所有需要操作的对象的信息，避免会话分离问题
-                    dest_list = []
-                    for dest in destinations:
-                        dest_list.append({
-                            'channel_id': dest.channel_id,
-                            'channel_title': dest.channel_title
-                        })
+                    # 查找适用于此源频道的活跃转发规则
+                    forward_rules = []
+                    try:
+                        forward_rules = ForwardRule.query.filter_by(
+                            source_channel_id=source_channel_id,
+                            is_active=True
+                        ).all()
+                    except Exception as e:
+                        logger.error(f"查询转发规则出错: {e}")
+                        # 如果查询出错，尝试使用旧的转发方式
                     
-                    # 转发给所有目标频道
-                    for dest in dest_list:
-                        dest_id = dest['channel_id']
-                        dest_title = dest['channel_title']
-                        
-                        try:
-                            logger.debug(f"开始转发到: {dest_title} ({dest_id})")
-                            # 处理目标ID格式
-                            target_id = dest_id
-                            if target_id.startswith('-100') and target_id[4:].isdigit():
-                                target_id = int(target_id[4:])
-                                logger.debug(f"使用处理后的目标ID: {target_id}")
-                            
-                            dest_entity = await self.client.get_entity(target_id)
-                            
-                            forwarded = await self.client.forward_messages(
-                                dest_entity,
-                                event.message
+                    if not forward_rules:
+                        logger.debug(f"没有为源频道 {source_channel_title} 配置转发规则，尝试使用旧版转发逻辑")
+                        # 兼容旧版，如果没有特定规则，尝试转发到所有目标
+                        destinations = Channel.query.filter_by(is_destination=True).all()
+                        for dest in destinations:
+                            # 直接转发到此目标
+                            await self._forward_message_to_channel(
+                                event.message, 
+                                chat_id,
+                                source_channel_title, 
+                                dest.channel_id, 
+                                dest.channel_title,
+                                message_title
                             )
-                            
-                            # 每次转发操作都在新的app上下文中执行数据库操作
-                            with self.app.app_context():
-                                # 记录转发消息
-                                forwarded_msg = ForwardedMessage(
-                                    message_id=event.message.id,
-                                    source_channel_id=chat_id,
-                                    destination_channel_id=dest_id,
-                                    message_title=message_title,
-                                    forwarded_at=datetime.utcnow()
+                    else:
+                        logger.debug(f"找到 {len(forward_rules)} 条适用的转发规则")
+                        # 转发到每个规则指定的目标频道
+                        for rule in forward_rules:
+                            dest = rule.destination_channel
+                            if dest:
+                                await self._forward_message_to_channel(
+                                    event.message, 
+                                    chat_id,
+                                    source_channel_title, 
+                                    dest.channel_id, 
+                                    dest.channel_title,
+                                    message_title
                                 )
-                                db.session.add(forwarded_msg)
-                                db.session.commit()
-                            
-                            logger.info(f"消息已转发: {source_channel_title} -> {dest_title}")
-                        except Exception as e:
-                            logger.error(f"转发消息到 {dest_title} 失败: {str(e)}")
-                            if logger.isEnabledFor(logging.DEBUG):
-                                logger.debug(traceback.format_exc())
+                            else:
+                                logger.error(f"规则 {rule.id} 的目标频道不存在")
             else:
                 logger.error("未设置Flask应用实例，无法处理数据库操作")
         except Exception as e:
             logger.error(f"处理消息时发生错误: {str(e)}")
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(traceback.format_exc())
+    
+    async def _forward_message_to_channel(self, message, source_chat_id, source_title, dest_id, dest_title, message_title):
+        """实际执行转发消息的辅助方法"""
+        try:
+            logger.debug(f"开始转发到: {dest_title} ({dest_id})")
+            # 处理目标ID格式
+            target_id = dest_id
+            if target_id.startswith('-100') and target_id[4:].isdigit():
+                target_id = int(target_id[4:])
+                logger.debug(f"使用处理后的目标ID: {target_id}")
+            
+            dest_entity = await self.client.get_entity(target_id)
+            
+            forwarded = await self.client.forward_messages(
+                dest_entity,
+                message
+            )
+            
+            # 每次转发操作都在新的app上下文中执行数据库操作
+            if self.app:
+                with self.app.app_context():
+                    # 记录转发消息
+                    forwarded_msg = ForwardedMessage(
+                        message_id=message.id,
+                        source_channel_id=source_chat_id,
+                        destination_channel_id=dest_id,
+                        message_title=message_title,
+                        forwarded_at=datetime.utcnow()
+                    )
+                    db.session.add(forwarded_msg)
+                    db.session.commit()
+            
+            logger.info(f"消息已转发: {source_title} -> {dest_title}")
+            return True
+        except Exception as e:
+            error_msg = str(e).lower()
+            
+            # 检查是否是禁止转发的错误
+            if 'restricted' in error_msg and 'forward' in error_msg:
+                # 这是禁止转发的错误
+                error_detail = f"消息来自受保护的聊天，无法转发"
+                logger.error(f"转发失败 - {error_detail}")
+                
+                # 如果应用上下文可用，记录这个错误到数据库
+                if self.app:
+                    with self.app.app_context():
+                        try:
+                            # 记录特殊错误类型的转发失败
+                            forwarded_msg = ForwardedMessage(
+                                message_id=message.id,
+                                source_channel_id=source_chat_id,
+                                destination_channel_id=dest_id,
+                                message_title=f"[转发失败] {error_detail}",
+                                forwarded_at=datetime.utcnow()
+                            )
+                            db.session.add(forwarded_msg)
+                            db.session.commit()
+                            logger.debug(f"已记录转发失败的消息")
+                        except Exception as db_err:
+                            logger.error(f"记录转发失败消息到数据库时出错: {db_err}")
+            elif 'chat_write_forbidden' in error_msg:
+                # 没有权限发送消息的错误
+                error_detail = f"没有在目标群组发送消息的权限"
+                logger.error(f"转发失败 - {error_detail}")
+                
+                # 记录到数据库
+                if self.app:
+                    with self.app.app_context():
+                        try:
+                            forwarded_msg = ForwardedMessage(
+                                message_id=message.id,
+                                source_channel_id=source_chat_id,
+                                destination_channel_id=dest_id,
+                                message_title=f"[转发失败] {error_detail}",
+                                forwarded_at=datetime.utcnow()
+                            )
+                            db.session.add(forwarded_msg)
+                            db.session.commit()
+                        except Exception as db_err:
+                            logger.error(f"记录转发失败消息到数据库时出错: {db_err}")
+            elif 'not found' in error_msg or 'peer id invalid' in error_msg:
+                # 目标频道不存在或ID无效
+                error_detail = f"目标频道不存在或ID无效"
+                logger.error(f"转发失败 - {error_detail}")
+                
+                # 记录到数据库
+                if self.app:
+                    with self.app.app_context():
+                        try:
+                            forwarded_msg = ForwardedMessage(
+                                message_id=message.id,
+                                source_channel_id=source_chat_id,
+                                destination_channel_id=dest_id,
+                                message_title=f"[转发失败] {error_detail}",
+                                forwarded_at=datetime.utcnow()
+                            )
+                            db.session.add(forwarded_msg)
+                            db.session.commit()
+                        except Exception as db_err:
+                            logger.error(f"记录转发失败消息到数据库时出错: {db_err}")
+            else:
+                # 其他类型的错误
+                error_detail = str(e)
+                logger.error(f"转发消息到 {dest_title} 失败: {error_detail}")
+                
+                # 记录到数据库
+                if self.app:
+                    with self.app.app_context():
+                        try:
+                            forwarded_msg = ForwardedMessage(
+                                message_id=message.id,
+                                source_channel_id=source_chat_id,
+                                destination_channel_id=dest_id,
+                                message_title=f"[转发失败] {error_detail[:80]}",  # 限制长度
+                                forwarded_at=datetime.utcnow()
+                            )
+                            db.session.add(forwarded_msg)
+                            db.session.commit()
+                        except Exception as db_err:
+                            logger.error(f"记录转发失败消息到数据库时出错: {db_err}")
+                
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(traceback.format_exc())
+            return False
 
 # 全局Telegram客户端实例
 telegram_client = None

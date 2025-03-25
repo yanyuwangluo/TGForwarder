@@ -1,0 +1,6 @@
+@echo off
+echo 开始修复数据库...
+python fix_database.py
+echo.
+echo 按任意键退出...
+pause >nul 

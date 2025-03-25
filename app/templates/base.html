@@ -31,6 +31,15 @@
             background-color: #f8d7da;
             color: #842029;
         }
+        /* 错误图标闪烁效果 */
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .blink {
+            animation: blink 1s linear infinite;
+        }
     </style>
 </head>
 <body>
@@ -56,12 +65,33 @@
                         <a class="nav-link {% if request.path == url_for('main.message_history') %}active{% endif %}" 
                            href="{{ url_for('main.message_history') }}">消息历史</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == url_for('main.manage_rules') %}active{% endif %}" 
+                           href="{{ url_for('main.manage_rules') }}">转发规则</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == url_for('main.error_log') %}active{% endif %}" 
+                           href="{{ url_for('main.error_log') }}">
+                            <i class="bi bi-exclamation-triangle-fill text-warning"></i> 错误日志
+                            <span id="errorBadge" class="badge bg-danger ms-1" style="display: none;">0</span>
+                        </a>
+                    </li>
                 </ul>
             </div>
         </div>
     </nav>
 
     <div class="container">
+        <!-- 添加错误通知区域 -->
+        <div id="errorNotifications" class="mt-3 mb-3" style="display:none;">
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <strong><i class="bi bi-exclamation-triangle-fill"></i> 转发错误:</strong> 
+                <span id="errorMessage"></span>
+                <a href="{{ url_for('main.error_log') }}" class="alert-link ms-2">查看详情</a>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
+            </div>
+        </div>
+        
         {% block content %}{% endblock %}
     </div>
 
@@ -72,6 +102,134 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- 错误通知脚本 -->
+    <script>
+        // 存储最近一次看到的错误ID
+        let lastSeenErrorId = 0;
+        
+        // 从localStorage加载已关闭的错误ID
+        function loadDismissedErrors() {
+            const dismissed = localStorage.getItem('dismissedErrors');
+            return dismissed ? JSON.parse(dismissed) : [];
+        }
+        
+        // 保存已关闭的错误ID到localStorage
+        function saveDismissedError(errorId) {
+            const dismissed = loadDismissedErrors();
+            if (!dismissed.includes(errorId)) {
+                dismissed.push(errorId);
+                // 保留最近的100条记录，防止列表过长
+                if (dismissed.length > 100) {
+                    dismissed.splice(0, dismissed.length - 100);
+                }
+                localStorage.setItem('dismissedErrors', JSON.stringify(dismissed));
+            }
+        }
+        
+        // 检查新的转发错误
+        function checkForErrors() {
+            fetch('/api/recent_errors')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.errors.length > 0) {
+                        // 获取最新的错误
+                        const latestError = data.errors[0];
+                        const dismissedErrors = loadDismissedErrors();
+                        
+                        // 如果这是新的错误（尚未显示过且未被关闭过）
+                        if (latestError.id > lastSeenErrorId && !dismissedErrors.includes(latestError.id)) {
+                            // 更新最后看到的错误ID
+                            lastSeenErrorId = latestError.id;
+                            
+                            // 设置错误消息
+                            document.getElementById('errorMessage').textContent = 
+                                `从 ${latestError.source} 转发到 ${latestError.destination} 时失败: ${latestError.message}`;
+                            
+                            // 显示通知
+                            document.getElementById('errorNotifications').style.display = 'block';
+                            
+                            // 如果页面不在可见状态，发送浏览器通知
+                            if (document.visibilityState !== 'visible' && Notification.permission === 'granted') {
+                                const notification = new Notification('Telegram转发助手 - 转发错误', {
+                                    body: `从 ${latestError.source} 转发到 ${latestError.destination} 时失败`,
+                                    icon: '/static/favicon.ico'
+                                });
+                                
+                                // 点击通知时打开错误日志页面
+                                notification.onclick = function() {
+                                    window.focus();
+                                    window.location.href = "{{ url_for('main.error_log') }}";
+                                };
+                            }
+                            
+                            // 更新错误计数
+                            updateErrorCount();
+                        }
+                    }
+                })
+                .catch(error => console.error('检查错误失败:', error));
+        }
+        
+        // 更新未读错误数量
+        function updateErrorCount() {
+            fetch('/api/unread_errors_count')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const errorBadge = document.getElementById('errorBadge');
+                        const errorIcon = document.querySelector('.nav-link .bi-exclamation-triangle-fill');
+                        
+                        if (data.count > 0) {
+                            errorBadge.textContent = data.count;
+                            errorBadge.style.display = 'inline';
+                            // 添加闪烁效果
+                            errorIcon.classList.add('blink');
+                        } else {
+                            errorBadge.style.display = 'none';
+                            // 移除闪烁效果
+                            errorIcon.classList.remove('blink');
+                        }
+                    }
+                })
+                .catch(error => console.error('获取未读错误数量失败:', error));
+        }
+        
+        // 请求通知权限
+        function requestNotificationPermission() {
+            if ('Notification' in window) {
+                if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+                    Notification.requestPermission();
+                }
+            }
+        }
+        
+        // 页面加载时请求通知权限
+        document.addEventListener('DOMContentLoaded', function() {
+            requestNotificationPermission();
+            
+            // 添加关闭按钮的点击事件处理
+            document.querySelector('.alert .btn-close').addEventListener('click', function() {
+                // 保存当前显示的错误ID到已关闭列表
+                if (lastSeenErrorId > 0) {
+                    saveDismissedError(lastSeenErrorId);
+                }
+            });
+            
+            // 立即检查一次
+            checkForErrors();
+            
+            // 立即更新错误计数
+            updateErrorCount();
+            
+            // 每30秒检查一次新错误
+            setInterval(checkForErrors, 30000);
+            
+            // 每分钟更新一次错误计数
+            setInterval(updateErrorCount, 60000);
+        });
+    </script>
+    
     {% block scripts %}{% endblock %}
 </body>
 </html> 

@@ -1,0 +1,81 @@
+# Telegram转发助手 - 常见错误解决指南
+
+## 1. 数据库错误 "没有此表：forward_rule" 
+
+问题原因：添加了新的ForwardRule模型但没有更新数据库架构。
+
+解决方法：
+1. 运行 `fix_database.bat` 或 `python fix_database.py`
+2. 这将创建缺少的forward_rule表
+
+## 2. 导入错误 "未定义名称 'ForwardRule'"
+
+问题原因：某些文件没有正确导入ForwardRule类。
+
+解决方法：
+1. 确保在需要使用ForwardRule的文件中添加导入:
+   ```python
+   from app.models import ForwardRule
+   ```
+
+## 3. 模板错误 "未定义变量 'active_rules'"
+
+问题原因：index页面模板需要active_rules变量但没有传递。
+
+解决方法：
+1. 确保index路由函数中获取并传递了active_rules变量:
+   ```python
+   active_rules = ForwardRule.query.filter_by(is_active=True).all()
+   ```
+
+## 4. 转发规则管理页面错误
+
+问题原因：访问rules.html页面但没有提供所需的变量。
+
+解决方法：
+1. 确保manage_rules函数正确获取并传递了所需变量:
+   ```python
+   rules = ForwardRule.query.all()
+   source_channels = Channel.query.filter_by(is_source=True).all()
+   destination_channels = Channel.query.filter_by(is_destination=True).all()
+   ```
+
+## 5. 应用无法启动
+
+问题原因：可能是配置文件问题或数据库连接问题。
+
+解决方法：
+1. 检查app/config.yaml是否存在并包含正确的配置
+2. 检查数据库连接
+3. 查看日志文件中的详细错误信息
+
+## 6. 转发不工作
+
+问题原因：可能是转发规则没有设置或消息处理器出错。
+
+解决方法：
+1. 确保已添加源频道和目标频道，并设置了转发规则
+2. 检查Telegram客户端是否正在运行
+3. 查看日志中是否有转发相关的错误
+
+## 7. 群组禁止转发消息错误
+
+问题原因：一些群组和频道设置了禁止转发消息的限制，或者没有足够的权限在目标群组发送消息。
+
+解决方法：
+1. 检查目标群组的权限设置，确保：
+   - 您的账号有足够权限在目标群组发送消息
+   - 目标群组/频道没有开启"禁止转发"设置
+2. 可以考虑以下替代方案：
+   - 使用不同的目标群组/频道
+   - 将您的账号升级为目标群组的管理员
+   - 使用复制内容而非转发的方式（需修改代码）
+3. 在消息历史页面，转发失败的消息会以红色背景标记显示
+
+## 如果以上方法无法解决问题
+
+请查看详细的日志文件，位于logs目录下：
+- logs/telegram_forwarder.log - 常规日志
+- logs/error.log - 错误日志
+
+根据日志提供的具体错误信息来解决问题。 

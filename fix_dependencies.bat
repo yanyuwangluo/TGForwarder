@@ -1,0 +1,6 @@
+@echo off
+echo 开始修复依赖关系...
+python fix_dependencies.py
+echo.
+echo 按任意键退出...
+pause >nul 

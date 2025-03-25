@@ -14,8 +14,68 @@ import asyncio
 import time
 import logging
 import traceback
+import yaml
+import sys
 from app import create_app
 from app.telegram_client import get_telegram_client, init_telegram_client
+
+# 加载配置文件
+def load_config():
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.yaml')
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+# 保存配置文件
+def save_config(config):
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.yaml')
+    with open(config_path, 'w', encoding='utf-8') as f:
+        yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+
+# 检查并获取必要的Telegram配置
+def check_telegram_config():
+    config = load_config()
+    telegram_config = config.get('telegram', {})
+    
+    # 检查API ID
+    api_id = telegram_config.get('api_id')
+    if not api_id:
+        print("请输入Telegram API ID:")
+        api_id = input().strip()
+        try:
+            # 确保API ID是整数
+            api_id = int(api_id)
+            telegram_config['api_id'] = api_id
+        except ValueError:
+            print("错误: API ID必须是一个整数!")
+            return check_telegram_config()  # 递归调用，重新获取
+    elif isinstance(api_id, str) and api_id.strip().isdigit():
+        # 如果是字符串形式的数字，转换为整数
+        api_id = int(api_id)
+        telegram_config['api_id'] = api_id
+    
+    # 检查API Hash
+    api_hash = telegram_config.get('api_hash')
+    if not api_hash:
+        print("请输入Telegram API Hash:")
+        api_hash = input().strip()
+        telegram_config['api_hash'] = api_hash
+    
+    # 检查手机号
+    phone = telegram_config.get('phone')
+    if not phone:
+        print("请输入Telegram账号手机号 (格式: +86123456789):")
+        phone = input().strip()
+        # 确保手机号格式正确
+        if not phone.startswith('+'):
+            print("提醒: 电话号码应该以'+'开头，已自动添加")
+            phone = '+' + phone
+        telegram_config['phone'] = phone
+    
+    # 如果有任何配置被更新，保存配置文件
+    config['telegram'] = telegram_config
+    save_config(config)
+    
+    return api_id, api_hash, phone
 
 # 配置日志
 def setup_logging():
@@ -106,10 +166,18 @@ def start_telegram_client():
     telegram_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(telegram_loop)
     
-    # 初始化Telegram客户端
-    api_id = os.getenv('API_ID')
-    api_hash = os.getenv('API_HASH')
-    phone = os.getenv('PHONE')
+    # 输出清晰的提示，表明正在等待用户输入
+    print("\n============================================")
+    print("Telegram客户端配置初始化")
+    print("============================================")
+    
+    # 检查并获取Telegram配置
+    api_id, api_hash, phone = check_telegram_config()
+    
+    # 输出清晰的提示，表明配置已完成，正在连接
+    print("\n============================================")
+    print("配置已完成，正在连接Telegram服务器...")
+    print("============================================\n")
     
     logger.debug(f"使用API ID: {api_id}, 手机号: {phone}")
     
@@ -177,30 +245,61 @@ def init_app():
     
     logger.debug("初始化应用，启动Telegram客户端线程")
     
+    # 先检查配置是否已设置，如果未设置，提示用户先设置配置
+    config = load_config()
+    telegram_config = config.get('telegram', {})
+    if not telegram_config.get('api_id') or not telegram_config.get('api_hash') or not telegram_config.get('phone'):
+        logger.info("Telegram配置未完全设置，将在后台线程中提示用户输入")
+        print("请注意: 需要输入Telegram API配置才能继续")
+    
     # 启动Telegram客户端线程
     telegram_thread = threading.Thread(target=start_telegram_client)
     telegram_thread.daemon = True  # 设为守护线程
     telegram_thread.start()
     
-    # 等待线程启动
-    time.sleep(1)
+    # 设置客户端已启动标志，避免重复启动
     client_started = True
     logger.debug("Telegram客户端线程已启动")
     
-    # 启动后尝试同步一次对话列表到本地数据库
-    try:
+    # 等待配置输入完成和客户端初始化
+    # 这里不立即尝试同步对话，等待客户端真正准备好后再进行
+    logger.debug("等待Telegram客户端初始化...")
+    max_wait_time = 120  # 最多等待2分钟
+    wait_interval = 5  # 每5秒检查一次
+    waited_time = 0
+    
+    while waited_time < max_wait_time:
+        # 检查客户端是否准备好
         if telegram_loop and get_telegram_client() and get_telegram_client().is_running:
-            logger.debug("尝试自动同步对话列表到本地数据库")
-            tg_client = get_telegram_client()
-            future = asyncio.run_coroutine_threadsafe(
-                tg_client.get_dialogs(use_cache=True, force_update=False), 
-                telegram_loop
-            )
-            dialogs_result = future.result(timeout=30)
-            logger.info(f"初始化时同步对话列表完成，获取到 {len(dialogs_result.get('results', []))} 个对话")
-    except Exception as e:
-        logger.error(f"自动同步对话列表失败: {e}")
-        logger.error(traceback.format_exc())
+            logger.debug("Telegram客户端已准备好")
+            
+            # 同步对话列表
+            try:
+                logger.debug("开始同步对话列表到本地数据库")
+                tg_client = get_telegram_client()
+                future = asyncio.run_coroutine_threadsafe(
+                    tg_client.get_dialogs(use_cache=True, force_update=False), 
+                    telegram_loop
+                )
+                # 增加超时时间
+                dialogs_result = future.result(timeout=60)
+                results = dialogs_result.get('results', [])
+                logger.info(f"初始化时同步对话列表完成，获取到 {len(results)} 个对话")
+                break
+            except Exception as e:
+                logger.error(f"同步对话列表失败: {e}")
+                logger.error(traceback.format_exc())
+                break
+        else:
+            # 客户端尚未准备好，等待一段时间
+            time.sleep(wait_interval)
+            waited_time += wait_interval
+            
+            # 只有在后台提示，避免干扰用户输入
+            logger.debug(f"等待客户端准备就绪...已等待{waited_time}秒")
+    
+    if waited_time >= max_wait_time:
+        logger.warning(f"等待客户端准备就绪超时(>{max_wait_time}秒)，可能需要手动重启应用")
 
 @app.teardown_appcontext
 def shutdown_client(exception=None):
@@ -235,20 +334,20 @@ def shutdown_client(exception=None):
             logger.error(f"停止Telegram客户端时发生错误: {e}")
 
 if __name__ == '__main__':
-    # 获取端口号，优先从命令行参数获取，其次从环境变量获取，最后使用默认值5000
+    # 获取端口号，优先从命令行参数获取，其次从配置文件获取，最后使用默认值5000
     import sys
     
     # 默认端口
     port = 5000
     
-    # 从环境变量获取
-    env_port = os.getenv('PORT')
-    if env_port:
-        try:
-            port = int(env_port)
-            logger.info(f"使用环境变量指定的端口: {port}")
-        except ValueError:
-            logger.warning(f"环境变量PORT值无效: {env_port}，使用默认端口: {port}")
+    # 从配置文件获取
+    try:
+        config = load_config()
+        if 'server' in config and 'port' in config['server']:
+            port = config['server']['port']
+            logger.info(f"使用配置文件指定的端口: {port}")
+    except Exception as e:
+        logger.warning(f"从配置文件获取端口失败: {e}，使用默认端口: {port}")
     
     # 从命令行参数获取（优先级更高）
     if len(sys.argv) > 1:

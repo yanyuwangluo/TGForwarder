@@ -10,8 +10,8 @@ import logging
 import traceback
 import sys
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, redirect, url_for, jsonify, current_app
-from app.models import db, Channel, ForwardedMessage, Dialog
+from flask import Blueprint, render_template, request, redirect, url_for, jsonify, current_app, flash, session
+from app.models import db, Channel, ForwardedMessage, Dialog, ForwardRule
 from app.telegram_client import get_telegram_client, init_telegram_client
 
 # 获取应用日志记录器
@@ -22,6 +22,11 @@ main_bp = Blueprint('main', __name__)
 # 全局变量存储后台任务循环
 telegram_loop = None
 background_task = None
+
+# 帮助函数：将UTC时间转换为北京时间
+def to_beijing_time(utc_time):
+    """将UTC时间转换为北京时间（UTC+8）"""
+    return utc_time + timedelta(hours=8)
 
 @main_bp.context_processor
 def inject_now():
@@ -36,6 +41,9 @@ def index():
         # 获取所有源频道和目标频道
         source_channels = Channel.query.filter_by(is_source=True).all()
         destination_channels = Channel.query.filter_by(is_destination=True).all()
+        
+        # 获取活跃的转发规则
+        active_rules = ForwardRule.query.filter_by(is_active=True).all()
         
         # 获取今日转发数量
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -58,10 +66,12 @@ def index():
             'index.html',
             source_channels=source_channels,
             destination_channels=destination_channels,
+            active_rules=active_rules,
             today_count=today_count,
             recent_forwards=recent_forwards,
             client_status=client_status,
-            channels=channels
+            channels=channels,
+            to_beijing_time=to_beijing_time
         )
     except Exception as e:
         logger.error(f"首页渲染出错: {e}")
@@ -189,7 +199,7 @@ def message_history():
         channels = {c.channel_id: c.channel_title for c in Channel.query.all()}
         
         logger.debug(f"加载消息历史: 第{page}页, 共{messages.total}条记录")
-        return render_template('messages.html', messages=messages, channels=channels)
+        return render_template('messages.html', messages=messages, channels=channels, to_beijing_time=to_beijing_time)
     except Exception as e:
         logger.error(f"加载消息历史时出错: {e}")
         logger.error(traceback.format_exc())
@@ -494,4 +504,216 @@ def sync_dialogs():
     except Exception as e:
         logger.error(f"同步对话列表时发生错误: {e}")
         logger.error(traceback.format_exc())
-        return jsonify({'success': False, 'error': str(e)}), 500 
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@main_bp.route('/rules')
+def manage_rules():
+    """管理转发规则页面"""
+    try:
+        logger.debug("访问转发规则管理页面")
+        
+        # 获取所有规则
+        rules = ForwardRule.query.all()
+        
+        # 获取所有频道，用于创建新规则
+        source_channels = Channel.query.filter_by(is_source=True).all()
+        destination_channels = Channel.query.filter_by(is_destination=True).all()
+        
+        return render_template(
+            'rules.html',
+            rules=rules,
+            source_channels=source_channels,
+            destination_channels=destination_channels
+        )
+    except Exception as e:
+        logger.error(f"转发规则管理页面加载出错: {e}")
+        logger.error(traceback.format_exc())
+        return f"服务器错误: {str(e)}", 500
+
+@main_bp.route('/rules/add', methods=['POST'])
+def add_rule():
+    """添加新的转发规则"""
+    try:
+        logger.debug("添加新的转发规则")
+        
+        source_id = request.form.get('source_id', type=int)
+        destination_id = request.form.get('destination_id', type=int)
+        
+        if not source_id or not destination_id:
+            flash('请选择源频道和目标频道', 'error')
+            return redirect(url_for('main.manage_rules'))
+        
+        # 检查源频道和目标频道是否存在
+        source = Channel.query.get(source_id)
+        destination = Channel.query.get(destination_id)
+        
+        if not source or not destination:
+            flash('选择的频道不存在', 'error')
+            return redirect(url_for('main.manage_rules'))
+        
+        # 检查是否已存在相同的规则
+        existing_rule = ForwardRule.query.filter_by(
+            source_channel_id=source_id,
+            destination_channel_id=destination_id
+        ).first()
+        
+        if existing_rule:
+            flash('已存在相同的转发规则', 'warning')
+            return redirect(url_for('main.manage_rules'))
+        
+        # 创建新规则
+        new_rule = ForwardRule(
+            source_channel_id=source_id,
+            destination_channel_id=destination_id,
+            is_active=True
+        )
+        
+        db.session.add(new_rule)
+        db.session.commit()
+        
+        flash(f'成功添加转发规则: {source.channel_title} -> {destination.channel_title}', 'success')
+        return redirect(url_for('main.manage_rules'))
+    except Exception as e:
+        logger.error(f"添加转发规则出错: {e}")
+        logger.error(traceback.format_exc())
+        flash(f'添加规则失败: {str(e)}', 'error')
+        return redirect(url_for('main.manage_rules'))
+
+@main_bp.route('/rules/<int:rule_id>/toggle', methods=['POST'])
+def toggle_rule(rule_id):
+    """启用/禁用转发规则"""
+    try:
+        logger.debug(f"切换规则 {rule_id} 的状态")
+        
+        rule = ForwardRule.query.get_or_404(rule_id)
+        rule.is_active = not rule.is_active
+        
+        db.session.commit()
+        
+        status = "启用" if rule.is_active else "禁用"
+        flash(f'已{status}转发规则: {rule.source_channel.channel_title} -> {rule.destination_channel.channel_title}', 'success')
+        return redirect(url_for('main.manage_rules'))
+    except Exception as e:
+        logger.error(f"切换规则状态出错: {e}")
+        logger.error(traceback.format_exc())
+        flash(f'操作失败: {str(e)}', 'error')
+        return redirect(url_for('main.manage_rules'))
+
+@main_bp.route('/rules/<int:rule_id>/delete', methods=['POST'])
+def delete_rule(rule_id):
+    """删除转发规则"""
+    try:
+        logger.debug(f"删除规则 {rule_id}")
+        
+        rule = ForwardRule.query.get_or_404(rule_id)
+        source_title = rule.source_channel.channel_title
+        dest_title = rule.destination_channel.channel_title
+        
+        db.session.delete(rule)
+        db.session.commit()
+        
+        flash(f'已删除转发规则: {source_title} -> {dest_title}', 'success')
+        return redirect(url_for('main.manage_rules'))
+    except Exception as e:
+        logger.error(f"删除规则出错: {e}")
+        logger.error(traceback.format_exc())
+        flash(f'删除失败: {str(e)}', 'error')
+        return redirect(url_for('main.manage_rules'))
+
+@main_bp.route('/api/recent_errors')
+def recent_errors():
+    """获取最近的转发错误信息"""
+    try:
+        # 获取最近10条转发失败的消息
+        recent_errors = ForwardedMessage.query.filter(
+            ForwardedMessage.message_title.like('[转发失败]%')
+        ).order_by(ForwardedMessage.forwarded_at.desc()).limit(10).all()
+        
+        error_data = []
+        for error in recent_errors:
+            # 获取来源和目标频道名称
+            source_channel = Channel.query.filter_by(channel_id=error.source_channel_id).first()
+            dest_channel = Channel.query.filter_by(channel_id=error.destination_channel_id).first()
+            
+            source_name = source_channel.channel_title if source_channel else error.source_channel_id
+            dest_name = dest_channel.channel_title if dest_channel else error.destination_channel_id
+            
+            # 提取错误消息（移除[转发失败]前缀）
+            error_message = error.message_title.replace('[转发失败] ', '')
+            
+            # 转换为北京时间
+            beijing_time = to_beijing_time(error.forwarded_at)
+            
+            error_data.append({
+                'id': error.id,
+                'time': beijing_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'source': source_name,
+                'destination': dest_name,
+                'message': error_message,
+                'timestamp': int(beijing_time.timestamp())
+            })
+        
+        return jsonify({
+            'success': True,
+            'errors': error_data
+        })
+    except Exception as e:
+        logger.error(f"获取转发错误信息失败: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+@main_bp.route('/error_log')
+def error_log():
+    """错误日志页面"""
+    try:
+        logger.debug("访问错误日志页面")
+        # 更新最后访问错误日志的时间
+        session['last_error_check'] = datetime.utcnow()
+        
+        page = request.args.get('page', 1, type=int)
+        per_page = 50
+        
+        # 获取所有转发失败的消息
+        errors = ForwardedMessage.query.filter(
+            ForwardedMessage.message_title.like('[转发失败]%')
+        ).order_by(
+            ForwardedMessage.forwarded_at.desc()
+        ).paginate(page=page, per_page=per_page)
+        
+        # 获取频道信息以便显示频道名称
+        channels = {c.channel_id: c.channel_title for c in Channel.query.all()}
+        
+        logger.debug(f"加载错误日志: 第{page}页, 共{errors.total}条记录")
+        return render_template('error_log.html', errors=errors, channels=channels, to_beijing_time=to_beijing_time)
+    except Exception as e:
+        logger.error(f"加载错误日志时出错: {e}")
+        logger.error(traceback.format_exc())
+        return f"加载错误日志失败: {str(e)}", 500
+
+@main_bp.route('/api/unread_errors_count')
+def unread_errors_count():
+    """获取未读错误数量"""
+    try:
+        # 获取最后一次用户访问错误日志页面的时间
+        # 这里我们使用session存储最后访问时间，如果没有则使用当前时间减去1小时
+        last_error_check = session.get('last_error_check', datetime.utcnow() - timedelta(hours=1))
+        
+        # 查询在上次查看后出现的新错误数量
+        new_errors_count = ForwardedMessage.query.filter(
+            ForwardedMessage.message_title.like('[转发失败]%'),
+            ForwardedMessage.forwarded_at > last_error_check
+        ).count()
+        
+        return jsonify({
+            'success': True,
+            'count': new_errors_count
+        })
+    except Exception as e:
+        logger.error(f"获取未读错误数量失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500 
