@@ -1,122 +1,77 @@
 # TeleRelay（电报中继）
 
-这是一个基于Python的Telegram频道转发工具，使用普通用户账号（非机器人）来监听指定频道并将消息转发到其他频道。
+基于Python的Telegram频道转发工具，使用普通用户账号（非机器人）来监听指定频道并将消息转发到其他频道。
 
-[English README](README_EN.md)
+[English Version](#english-version)
 
 ## 主要功能
 
-- 监听多个Telegram频道
-- 将消息转发到多个目标频道
-- 通过Web界面进行管理
-- 查看转发历史和统计数据
-- 显示当天转发的消息数量
-- 缓存对话列表到本地数据库
-- 日志系统，支持文件轮转
-- 自定义端口运行
-- Docker支持，方便部署
-- GitHub Actions自动构建
+- **高效转发**: 自动监听指定频道并转发消息
+- **Web界面管理**: 可视化配置转发规则与频道
+- **频道搜索**: 快速从大量频道中筛选特定频道
+- **实时错误监控**: 
+  - 转发失败实时通知
+  - 错误日志专用页面
+  - 浏览器桌面通知
+  - 导航栏错误计数提醒
+- **北京时间显示**: 所有时间戳自动转换为北京时间
+- **完善的日志系统**: 便于故障排查与监控
 
 ## 安装与配置
 
-### 1. 安装依赖
+### 基本安装
 
-```bash
-pip install -r requirements.txt
-```
-
-### 2. 配置环境变量
-
-复制`.env.example`文件为`.env`，并填写以下信息：
-
-```
-# Telegram API配置
-API_ID=你的API_ID
-API_HASH=你的API_HASH
-PHONE=你的电话号码（包含国家代码，如+8613800138000）
-
-# Flask配置 
-SECRET_KEY=你的秘钥
-DATABASE_URI=sqlite:///telegram_forwarder.db
-
-# 可选配置
-PORT=5000  # Web服务端口，默认5000
-```
-
-关于API_ID和API_HASH：
-1. 访问 https://my.telegram.org/ 并登录
-2. 前往 "API development tools"
-3. 创建一个新应用程序，获取API_ID和API_HASH
-
-### 3. 运行应用
-
-标准启动：
-```bash
-python app.py
-```
-
-指定端口启动：
-```bash
-# 方法1：通过命令行参数
-python app.py 8080
-
-# 方法2：通过环境变量
-PORT=8080 python app.py
-```
-
-应用将在指定端口上启动，默认为 http://127.0.0.1:5000。使用自定义端口时，访问地址相应变更。
-
-## Docker部署
-
-项目支持Docker部署，提供更简单的安装和管理方式。
-
-### 准备工作
-
-1. 安装Docker和Docker Compose
-2. 配置`.env`文件（与上述配置相同）
-3. 可选：添加Telegram自动登录配置
-
-### Telegram自动登录配置
-
-在`.env`文件中添加以下配置可实现无需交互自动登录：
-
-```
-# Telegram登录配置
-TG_2FA_PASSWORD=your_2fa_password  # 如果启用了二次验证，填写密码
-TG_ALWAYS_CONFIRM=true  # 自动确认服务条款
-```
-
-当收到Telegram验证码时，有两种方式处理：
-
-1. **临时方式**：启动容器后，查看日志获取验证码提示，然后将容器停止，并通过环境变量传入验证码重新启动：
+1. 安装依赖
    ```bash
-   TG_LOGIN_CODE=12345 docker-compose up -d
+   pip install -r requirements.txt
    ```
 
-2. **持久方式**：将验证码提前写入`.env`文件：
+2. 配置YAML文件  
+   编辑项目根目录下的`config.yaml`文件:
+   ```yaml
+   telegram:
+     api_id: 你的API_ID
+     api_hash: 你的API_HASH
+     phone: 你的电话号码（如+8613800138000）
+   
+   server:
+     port: 5000  # Web服务端口
    ```
-   TG_LOGIN_CODE=12345  # Telegram发送的验证码
+
+3. 运行应用
+   ```bash
+   python app.py
    ```
 
-> 注意：一旦登录成功，会话信息会保存在`sessions`目录，后续启动无需再次登录。
+### Docker部署
 
-### 使用Docker启动
+1. 构建并启动
+   ```bash
+   docker-compose up -d
+   ```
 
-```bash
-# 构建并启动容器
-docker-compose up -d
+2. 查看日志
+   ```bash
+   docker-compose logs -f
+   ```
 
-# 查看日志
-docker-compose logs -f
+## 功能使用指南
 
-# 停止服务
-docker-compose down
-```
+### 基本操作流程
 
-### 直接使用Docker Hub镜像
+1. **首次登录**: 验证您的Telegram账号
+2. **管理频道**: 
+   - 进入"频道管理"页面
+   - 使用"同步所有对话"获取频道列表
+   - 使用搜索功能快速找到特定频道
+   - 设置频道为"监听源"或"转发目标"
+3. **创建转发规则**: 在"转发规则"页面创建规则
+4. **启动服务**: 点击"启动服务"开始自动转发
+5. **监控错误**: 通过错误日志页面查看转发问题
 
-您可以直接使用我们预构建的Docker镜像：
-
+<<<<<<< HEAD
+### 错误通知系统
+=======
 ```bash
 # 下载并启动（请替换username为实际用户名）
 docker run -d --name telerelay \
@@ -128,103 +83,149 @@ docker run -d --name telerelay \
   --restart unless-stopped \
   yanyuwangluo/telerelay:latest
 ```
+>>>>>>> 37fb9a68da04ce93cf2322d41e17e1a2b0334e38
 
-### Docker配置说明
-
-Docker部署会自动映射以下内容：
-- 端口：默认5000端口（可通过.env中的PORT修改）
-- 日志目录：`./logs` → `/app/logs`
-- 数据库：`./data` → `/app/data`
-- 配置文件：`./.env` → `/app/.env`
-- Telegram会话：`./sessions` → `/app/sessions`
-
-可以通过修改`docker-compose.yml`自定义这些映射。
-
-## GitHub Actions自动构建
-
-本项目使用GitHub Actions自动构建并发布Docker镜像到Docker Hub。
-
-### 自动化流程
-
-1. 当代码推送到main分支时，自动触发构建
-2. 当创建版本标签(如v1.0.0)时，自动构建带版本号的镜像
-3. 自动推送到Docker Hub
-4. 同时构建支持ARM64和AMD64架构的镜像
-
-### 多架构支持
-
-TeleRelay的Docker镜像支持以下CPU架构：
-- `linux/amd64`: 适用于标准PC、服务器、大多数云环境
-- `linux/arm64`: 适用于树莓派4、Apple M1/M2系列、AWS Graviton等ARM设备
-
-无需特殊配置，Docker会自动拉取匹配您设备架构的镜像。
-
-### 如何使用
-
-要在自己的GitHub仓库中启用自动构建，需要设置以下Secrets：
-
-1. `DOCKERHUB_USERNAME`: Docker Hub用户名
-2. `DOCKERHUB_TOKEN`: Docker Hub访问令牌（不是密码）
-
-如何设置：
-1. 在GitHub仓库页面，点击"Settings"
-2. 点击"Secrets and variables" → "Actions"
-3. 点击"New repository secret"添加上述两个密钥
-
-## 使用指南
-
-1. 首次运行时，会要求验证Telegram账号，请按照提示操作。
-2. 在Web界面中，前往"频道管理"页面添加要监听和转发的频道。
-3. 点击"启动服务"开始监听和转发。
-4. 在频道管理页面使用"同步所有对话"按钮可以获取全部频道和群组。
-
-## 日志系统
-
-系统具有完善的日志记录功能，所有日志存储在`logs`目录下：
-- `telegram_forwarder.log`: 常规运行日志（INFO级别及以上）
-- `error.log`: 仅错误日志（ERROR级别）
-
-日志特性：
-- 自动轮转：单个日志文件最大5MB
-- 保留历史：保留最近10个日志文件
-- 分级记录：详细的调试信息仅在控制台显示
-
-## 注意事项
-
-- 使用普通用户账号进行大量自动转发可能违反Telegram服务条款，请谨慎使用。
-- 频道ID格式通常为`-100xxxxxxxxx`，也可以使用`@username`格式。
-- 请确保账号已加入源频道和目标频道，且有足够的权限。
-- 使用Docker部署时，首次启动需要验证Telegram账号，请查看日志进行操作。
+- **实时通知**: 转发失败时页面顶部显示通知
+- **错误日志页面**: 集中查看所有历史错误
+- **桌面通知**: 页面不可见时发送浏览器通知
+- **错误计数**: 导航栏显示未读错误数量
 
 ## 常见问题
 
-1. 如何获取频道ID？
-   - 在频道管理页面使用"同步所有对话"功能自动获取
-   - 或者转发频道中的消息到 @username_to_id_bot
-   - 或者在网页版Telegram中，频道链接中的数字部分就是ID
+1. **获取API_ID和API_HASH**:
+   - 访问 https://my.telegram.org/
+   - 登录后前往"API development tools"
+   - 创建一个新应用获取凭证
 
-2. 程序无法连接Telegram？
-   - 请检查API_ID和API_HASH是否正确
-   - 确认网络连接是否正常
-   - 查看logs/error.log文件了解详细错误信息
+2. **无法连接Telegram**:
+   - 检查API_ID和API_HASH是否正确
+   - 确认网络连接正常
+   - 查看logs/error.log了解详细错误信息
 
-3. 无法转发消息？
-   - 确保账号已加入源频道和目标频道
-   - 检查是否有转发权限
-   - 查看应用日志了解详细错误信息
-   
-4. 如何获取全部频道和群组？
-   - 在频道管理页面点击"同步所有对话"按钮
-   - 同步过程可能需要一些时间，请耐心等待
-   - 同步后的数据会缓存到本地数据库，速度更快
+3. **转发失败原因**:
+   - 未加入源频道或目标频道
+   - 源频道禁止转发
+   - 在目标频道缺少发送权限
+   - 详细原因会显示在错误日志中
 
-5. Docker部署时如何验证Telegram账号？
-   - 首次启动时查看容器日志：`docker-compose logs -f`
-   - 按照日志中的提示输入验证码
-   - 可以使用`docker-compose exec telerelay bash`进入容器内部进行操作
+4. **频道ID格式问题**:
+   - 频道ID通常为`-100xxxxxxxxx`
+   - 也可以使用`@username`格式
 
 ## 许可证
 
-本项目采用MIT许可证。详情请参阅[LICENSE](LICENSE)文件。
+本项目采用MIT许可证。
 
+<<<<<<< HEAD
+版权所有 (c) 2023-2025 烟雨 (www.yanyuwangluo.cn)
+
+---
+
+# English Version
+
+# TeleRelay
+
+A Python-based Telegram channel forwarding tool that uses a regular user account (not a bot) to monitor specified channels and forward messages to other channels.
+
+## Key Features
+
+- **Efficient Forwarding**: Automatically monitor and forward messages from specified channels
+- **Web Interface**: Visual configuration of forwarding rules and channels
+- **Channel Search**: Quickly filter specific channels from a large number of channels
+- **Real-time Error Monitoring**: 
+  - Instant notifications for forwarding failures
+  - Dedicated error log page
+  - Browser desktop notifications
+  - Error count alerts in navigation bar
+- **Beijing Time Display**: All timestamps automatically converted to Beijing time
+- **Comprehensive Logging System**: For easy troubleshooting and monitoring
+
+## Installation and Configuration
+
+### Basic Installation
+
+1. Install dependencies
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Configure YAML file  
+   Edit the `config.yaml` file in the project root directory:
+   ```yaml
+   telegram:
+     api_id: your_API_ID
+     api_hash: your_API_HASH
+     phone: your_phone_number (e.g., +12025550123)
+   
+   server:
+     port: 5000  # Web service port
+   ```
+
+3. Run the application
+   ```bash
+   python app.py
+   ```
+
+### Docker Deployment
+
+1. Build and start
+   ```bash
+   docker-compose up -d
+   ```
+
+2. View logs
+   ```bash
+   docker-compose logs -f
+   ```
+
+## Feature Usage Guide
+
+### Basic Operation Flow
+
+1. **First Login**: Verify your Telegram account
+2. **Manage Channels**: 
+   - Go to the "Channel Management" page
+   - Use "Sync All Dialogs" to get your channel list
+   - Use the search function to quickly find specific channels
+   - Set channels as "Monitoring Source" or "Forwarding Target"
+3. **Create Forwarding Rules**: Create rules on the "Forwarding Rules" page
+4. **Start Service**: Click "Start Service" to begin automatic forwarding
+5. **Monitor Errors**: Check forwarding issues through the error log page
+
+### Error Notification System
+
+- **Real-time Notifications**: Display at page top when forwarding fails
+- **Error Log Page**: Centralized view of all historical errors
+- **Desktop Notifications**: Browser notifications when page is not visible
+- **Error Count**: Navigation bar displays unread error count
+
+## Common Issues
+
+1. **Getting API_ID and API_HASH**:
+   - Visit https://my.telegram.org/
+   - Log in and go to "API development tools"
+   - Create a new application to get credentials
+
+2. **Cannot Connect to Telegram**:
+   - Check if API_ID and API_HASH are correct
+   - Confirm network connection is normal
+   - Check logs/error.log for detailed error information
+
+3. **Forwarding Failure Reasons**:
+   - Not joined source or target channel
+   - Source channel prohibits forwarding
+   - Lack of sending permissions in target channel
+   - Detailed reasons will be shown in the error log
+
+4. **Channel ID Format Issues**:
+   - Channel ID is typically `-100xxxxxxxxx`
+   - Can also use `@username` format
+
+## License
+
+This project is licensed under the MIT License.
+
+Copyright (c) 2023-2025 YanYu (www.yanyuwangluo.cn)
+=======
 Copyright (c) 2023-2025 烟雨 (www.yanyuwangluo.cn) 
+>>>>>>> 37fb9a68da04ce93cf2322d41e17e1a2b0334e38
