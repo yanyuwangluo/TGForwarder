@@ -44,6 +44,7 @@ class ForwardedMessage(db.Model):
     destination_channel_id = db.Column(db.String(100))  # 目标频道ID
     message_title = db.Column(db.String(500))  # 消息标题或前100个字符
     forwarded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    forwarded_msg_id = db.Column(db.Integer, nullable=True)  # 转发后的消息ID
     
     def __repr__(self):
         return f'<ForwardedMessage {self.id}>'

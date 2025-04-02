@@ -22,9 +22,9 @@
 ### 基本安装
 
 1. 安装依赖
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+pip install -r requirements.txt
+```
 
 2. 配置YAML文件  
    编辑项目根目录下的`config.yaml`文件:
@@ -39,15 +39,15 @@
    ```
 
 3. 运行应用
-   ```bash
-   python app.py
-   ```
+```bash
+python app.py
+```
 
 ### Docker部署
 
 1. 启动
 ##### 手机号必须包含国家代码和按照这个形式不能有空格，如+8613800138000
-   ```bash
+```bash
    mkdir telegram_forwarder
    cd telegram_forwarder
    touch config.yaml
@@ -156,7 +156,7 @@ A Python-based Telegram channel forwarding tool that uses a regular user account
 ### Docker Deployment
 
 1. start
-   ```bash
+```bash
    mkdir telegram_forwarder
    cd telegram_forwarder
    touch config.yaml
@@ -169,7 +169,7 @@ A Python-based Telegram channel forwarding tool that uses a regular user account
    ```
 
 2. View logs
-   ```bash
+```bash
    docker logs telerelay -f
    ```
 

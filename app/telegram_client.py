@@ -76,6 +76,8 @@ class TelegramForwarder:
                 if not self._handlers_registered:
                     logger.debug("注册消息处理器")
                     self.client.add_event_handler(self.message_handler, events.NewMessage)
+                    # 添加编辑消息处理器
+                    self.client.add_event_handler(self.edited_message_handler, events.MessageEdited)
                     self._handlers_registered = True
                 
                 # 获取客户端信息
@@ -121,6 +123,11 @@ class TelegramForwarder:
                         self.message_handler,
                         events.NewMessage()
                     )
+                    # 添加编辑消息处理器
+                    self.client.add_event_handler(
+                        self.edited_message_handler,
+                        events.MessageEdited()
+                    )
                     self._handlers_registered = True
                 
                 self.is_running = True
@@ -144,6 +151,7 @@ class TelegramForwarder:
                 if self._handlers_registered:
                     logger.debug("移除消息处理器")
                     self.client.remove_event_handler(self.message_handler)
+                    self.client.remove_event_handler(self.edited_message_handler)
                     self._handlers_registered = False
                 
                 # 断开连接
@@ -541,7 +549,7 @@ class TelegramForwarder:
                     source_channel_title = source_channel.channel_title
                     source_channel_id = source_channel.id
                     logger.info(f"收到来自监听源的消息: {source_channel_title}")
-                    
+                        
                     # 获取消息内容作为标题
                     message_text = event.message.message
                     message_title = message_text[:100] if message_text else "无文本内容"
@@ -595,6 +603,97 @@ class TelegramForwarder:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(traceback.format_exc())
     
+    async def edited_message_handler(self, event):
+        """处理编辑过的消息并更新已转发的消息"""
+        if not event.message:
+            return
+            
+        # 获取消息来源
+        try:
+            logger.debug("收到编辑消息")
+            chat = await event.get_chat()
+            
+            # 获取正确格式的频道ID
+            if hasattr(chat, 'id'):
+                # 对于超级群组和频道，ID格式为 -100{chat.id}
+                if hasattr(chat, 'megagroup') or hasattr(chat, 'broadcast'):
+                    chat_id = f"-100{chat.id}"
+                else:
+                    chat_id = str(chat.id)
+            else:
+                chat_id = str(getattr(chat, 'id', 'unknown'))
+            
+            message_id = event.message.id
+            logger.debug(f"编辑消息来源: {chat_id}, 消息ID: {message_id}")
+            
+            # 创建Flask应用上下文
+            if self.app:
+                with self.app.app_context():
+                    # 检查是否是来自监听的源频道
+                    source_channel = Channel.query.filter_by(
+                        channel_id=chat_id, 
+                        is_source=True
+                    ).first()
+                    
+                    if not source_channel:
+                        logger.debug(f"频道 {chat_id} 不是监听源，忽略编辑消息")
+                        return
+                    
+                    # 查找之前转发的记录
+                    forwarded_records = ForwardedMessage.query.filter_by(
+                        message_id=message_id,
+                        source_channel_id=chat_id
+                    ).all()
+                    
+                    if not forwarded_records:
+                        logger.debug(f"没有找到原消息ID为 {message_id} 的转发记录，忽略编辑")
+                        return
+                    
+                    logger.info(f"找到 {len(forwarded_records)} 条消息ID为 {message_id} 的转发记录，准备更新")
+                    
+                    # 获取消息内容作为标题
+                    message_text = event.message.message
+                    message_title = message_text[:100] if message_text else "无文本内容"
+                    logger.debug(f"编辑后的消息内容: {message_title[:50]}{'...' if len(message_title) > 50 else ''}")
+                    
+                    # 更新每条转发记录
+                    for record in forwarded_records:
+                        # 检查是否有已保存的转发消息ID
+                        if record.forwarded_msg_id:
+                            try:
+                                # 处理目标ID格式
+                                target_id = record.destination_channel_id
+                                if target_id.startswith('-100') and target_id[4:].isdigit():
+                                    target_id = int(target_id[4:])
+                                
+                                # 获取目标实体
+                                dest_entity = await self.client.get_entity(target_id)
+                                
+                                # 在目标频道更新消息
+                                await self.client.edit_message(
+                                    entity=dest_entity,
+                                    message=record.forwarded_msg_id,
+                                    text=message_text
+                                )
+                                
+                                # 更新数据库记录
+                                record.message_title = message_title
+                                record.forwarded_at = datetime.utcnow()
+                                db.session.commit()
+                                
+                                logger.info(f"已更新转发消息: 目标 {record.destination_channel_id}, 消息ID {record.forwarded_msg_id}")
+                            except Exception as e:
+                                logger.error(f"更新转发消息失败: {e}")
+                                # 消息可能已被删除或无法编辑，记录错误但不阻止其他更新
+                        else:
+                            logger.debug(f"转发记录 {record.id} 没有保存转发后的消息ID，无法更新")
+            else:
+                logger.error("未设置Flask应用实例，无法处理数据库操作")
+        except Exception as e:
+            logger.error(f"处理编辑消息时发生错误: {str(e)}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(traceback.format_exc())
+    
     async def _forward_message_to_channel(self, message, source_chat_id, source_title, dest_id, dest_title, message_title):
         """实际执行转发消息的辅助方法"""
         try:
@@ -612,6 +711,13 @@ class TelegramForwarder:
                 message
             )
             
+            # 获取转发后的消息ID
+            forwarded_msg_id = None
+            if forwarded and isinstance(forwarded, list) and len(forwarded) > 0:
+                forwarded_msg_id = forwarded[0].id
+            elif hasattr(forwarded, 'id'):
+                forwarded_msg_id = forwarded.id
+            
             # 每次转发操作都在新的app上下文中执行数据库操作
             if self.app:
                 with self.app.app_context():
@@ -621,12 +727,13 @@ class TelegramForwarder:
                         source_channel_id=source_chat_id,
                         destination_channel_id=dest_id,
                         message_title=message_title,
-                        forwarded_at=datetime.utcnow()
+                        forwarded_at=datetime.utcnow(),
+                        forwarded_msg_id=forwarded_msg_id
                     )
                     db.session.add(forwarded_msg)
                     db.session.commit()
             
-            logger.info(f"消息已转发: {source_title} -> {dest_title}")
+            logger.info(f"消息已转发: {source_title} -> {dest_title}, 转发后消息ID: {forwarded_msg_id}")
             return True
         except Exception as e:
             error_msg = str(e).lower()
@@ -647,7 +754,8 @@ class TelegramForwarder:
                                 source_channel_id=source_chat_id,
                                 destination_channel_id=dest_id,
                                 message_title=f"[转发失败] {error_detail}",
-                                forwarded_at=datetime.utcnow()
+                                forwarded_at=datetime.utcnow(),
+                                forwarded_msg_id=None
                             )
                             db.session.add(forwarded_msg)
                             db.session.commit()
@@ -668,7 +776,8 @@ class TelegramForwarder:
                                 source_channel_id=source_chat_id,
                                 destination_channel_id=dest_id,
                                 message_title=f"[转发失败] {error_detail}",
-                                forwarded_at=datetime.utcnow()
+                                forwarded_at=datetime.utcnow(),
+                                forwarded_msg_id=None
                             )
                             db.session.add(forwarded_msg)
                             db.session.commit()
@@ -688,7 +797,8 @@ class TelegramForwarder:
                                 source_channel_id=source_chat_id,
                                 destination_channel_id=dest_id,
                                 message_title=f"[转发失败] {error_detail}",
-                                forwarded_at=datetime.utcnow()
+                                forwarded_at=datetime.utcnow(),
+                                forwarded_msg_id=None
                             )
                             db.session.add(forwarded_msg)
                             db.session.commit()
@@ -708,7 +818,8 @@ class TelegramForwarder:
                                 source_channel_id=source_chat_id,
                                 destination_channel_id=dest_id,
                                 message_title=f"[转发失败] {error_detail[:80]}",  # 限制长度
-                                forwarded_at=datetime.utcnow()
+                                forwarded_at=datetime.utcnow(),
+                                forwarded_msg_id=None
                             )
                             db.session.add(forwarded_msg)
                             db.session.commit()
