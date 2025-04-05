@@ -19,39 +19,22 @@ jobs:
           flutter-version: '3.19.x'
           channel: 'stable'
       
-      # 切换到apps目录
-      - name: Change to apps directory
-        run: cd apps
-      
       # 在apps目录中运行Flutter命令
       - name: Get Flutter dependencies
         working-directory: ./apps
         run: flutter pub get
         
-      - name: Create key.properties
+      # 创建平台特定文件
+      - name: Create platform-specific files
         working-directory: ./apps
         run: |
-          echo "storePassword=${{ secrets.KEY_STORE_PASSWORD }}" > android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
-          echo "keyAlias=tg_forwarder" >> android/key.properties
-          echo "storeFile=../app/keystore.jks" >> android/key.properties
-          
-      - name: Download Android keystore
-        id: android_keystore
-        uses: timheuer/base64-to-file@v1.2
-        with:
-          fileName: keystore.jks
-          encodedString: ${{ secrets.KEYSTORE_BASE64 }}
-          
-      - name: Copy keystore
+          flutter create --platforms=android .
+          ls -la
+        
+      # 构建未签名APK
+      - name: Build unsigned APK
         working-directory: ./apps
-        run: |
-          mkdir -p android/app
-          cp ${{ steps.android_keystore.outputs.filePath }} android/app/keystore.jks
-          
-      - name: Build APK
-        working-directory: ./apps
-        run: flutter build apk --release
+        run: flutter build apk --release --no-shrink
         
       - uses: actions/upload-artifact@v4
         with:
