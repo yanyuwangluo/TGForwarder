@@ -8,17 +8,41 @@ import '../models/error_log.dart';
 import '../services/auth_service.dart';
 
 class ApiService {
-  final String baseUrl;
+  String? _baseUrl;
   final http.Client _client = http.Client();
   final AuthService _authService = AuthService();
   String? _secretKey;
   
-  ApiService({required this.baseUrl}) {
-    _loadSecretKey();
+  // 单例模式
+  static final ApiService _instance = ApiService._internal();
+  
+  factory ApiService() {
+    return _instance;
+  }
+  
+  ApiService._internal() {
+    _init();
+  }
+  
+  Future<void> _init() async {
+    await _loadSecretKey();
+    await _loadBaseUrl();
   }
   
   Future<void> _loadSecretKey() async {
     _secretKey = await _authService.getSecretKey();
+  }
+  
+  Future<void> _loadBaseUrl() async {
+    _baseUrl = await AppConfig.getApiBaseUrl();
+  }
+  
+  // 确保在每次API调用前检查基础URL
+  Future<String> get baseUrl async {
+    if (_baseUrl == null) {
+      await _loadBaseUrl();
+    }
+    return _baseUrl!;
   }
   
   Map<String, String> get _headers {
@@ -30,7 +54,7 @@ class ApiService {
   }
   
   Future<List<Channel>> getChannels() async {
-    final url = Uri.parse('$baseUrl/channels');
+    final url = Uri.parse('${await baseUrl}/channels');
     final response = await _client.get(url, headers: _headers);
     
     if (response.statusCode == 200) {
@@ -43,7 +67,7 @@ class ApiService {
   
   Future<List<ForwardRule>> getForwardRules() async {
     final response = await http.get(
-      Uri.parse('$baseUrl${AppConfig.rulesPath}'),
+      Uri.parse('${await baseUrl}${AppConfig.rulesPath}'),
       headers: _headers
     );
     
@@ -57,7 +81,7 @@ class ApiService {
   
   Future<MessagePagination> getMessages({int page = 1}) async {
     final response = await http.get(
-      Uri.parse('$baseUrl${AppConfig.messagesPath}?page=$page'),
+      Uri.parse('${await baseUrl}${AppConfig.messagesPath}?page=$page'),
       headers: _headers
     );
     
@@ -70,7 +94,7 @@ class ApiService {
   }
   
   Future<Map<String, dynamic>> getStatus() async {
-    final url = Uri.parse('$baseUrl/status');
+    final url = Uri.parse('${await baseUrl}/status');
     final response = await _client.get(url, headers: _headers);
     
     if (response.statusCode == 200) {
@@ -81,7 +105,7 @@ class ApiService {
   }
   
   Future<bool> startService() async {
-    final url = Uri.parse('$baseUrl/start');
+    final url = Uri.parse('${await baseUrl}/start');
     final response = await _client.post(url, headers: _headers);
     
     if (response.statusCode == 200) {
@@ -92,7 +116,7 @@ class ApiService {
   }
   
   Future<bool> stopService() async {
-    final url = Uri.parse('$baseUrl/stop');
+    final url = Uri.parse('${await baseUrl}/stop');
     final response = await _client.post(url, headers: _headers);
     
     if (response.statusCode == 200) {
@@ -103,7 +127,7 @@ class ApiService {
   }
   
   Future<Map<String, dynamic>> getSettings() async {
-    final url = Uri.parse('$baseUrl/settings');
+    final url = Uri.parse('${await baseUrl}/settings');
     final response = await _client.get(url, headers: _headers);
     
     if (response.statusCode == 200) {
@@ -120,7 +144,13 @@ class ApiService {
     required String serverUrl,
     String? secretKey,
   }) async {
-    final url = Uri.parse('$baseUrl/settings');
+    // 更新API基础地址
+    if (serverUrl.isNotEmpty && serverUrl != await baseUrl) {
+      await AppConfig.setApiBaseUrl(serverUrl);
+      await _loadBaseUrl();
+    }
+    
+    final url = Uri.parse('${await baseUrl}/settings');
     
     // 如果提供了新的secretKey，更新本地存储
     if (secretKey != null && secretKey.isNotEmpty) {
@@ -146,7 +176,7 @@ class ApiService {
   }
   
   Future<ErrorLogResult> getErrorLogs({int page = 1, int itemsPerPage = 20}) async {
-    final url = Uri.parse('$baseUrl/error_logs?page=$page&per_page=$itemsPerPage');
+    final url = Uri.parse('${await baseUrl}/error_logs?page=$page&per_page=$itemsPerPage');
     final response = await _client.get(url, headers: _headers);
     
     if (response.statusCode == 200) {

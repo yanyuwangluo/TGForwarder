@@ -11,7 +11,7 @@ import logging
 import traceback
 import yaml
 from datetime import datetime
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, types
 from telethon.tl.types import PeerChannel, Channel as TelegramChannel
 from app.models import db, Channel, ForwardedMessage, Dialog, ForwardRule
 from flask import current_app
@@ -42,6 +42,12 @@ class TelegramForwarder:
         """启动Telegram客户端"""
         try:
             logger.debug("准备启动Telegram客户端")
+            
+            # 检查phone参数是否有效
+            if not self.phone or not isinstance(self.phone, str) or len(self.phone) < 5:
+                error_msg = f"无效的电话号码: '{self.phone}'"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
             
             # 获取会话名称
             session_name = self.config.get('session_name', '')
@@ -656,6 +662,11 @@ class TelegramForwarder:
                     message_title = message_text[:100] if message_text else "无文本内容"
                     logger.debug(f"编辑后的消息内容: {message_title[:50]}{'...' if len(message_title) > 50 else ''}")
                     
+                    # 检查消息是否包含媒体
+                    has_media = bool(event.message.media and not isinstance(event.message.media, types.MessageMediaWebPage))
+                    has_media_update = has_media and event.message.media != types.MessageMediaEmpty()
+                    logger.debug(f"消息包含媒体: {has_media}, 媒体已更新: {has_media_update}")
+                    
                     # 更新每条转发记录
                     for record in forwarded_records:
                         # 检查是否有已保存的转发消息ID
@@ -669,21 +680,119 @@ class TelegramForwarder:
                                 # 获取目标实体
                                 dest_entity = await self.client.get_entity(target_id)
                                 
-                                # 在目标频道更新消息
-                                await self.client.edit_message(
-                                    entity=dest_entity,
-                                    message=record.forwarded_msg_id,
-                                    text=message_text
-                                )
-                                
-                                # 更新数据库记录
-                                record.message_title = message_title
-                                record.forwarded_at = datetime.utcnow()
-                                db.session.commit()
-                                
-                                logger.info(f"已更新转发消息: 目标 {record.destination_channel_id}, 消息ID {record.forwarded_msg_id}")
+                                # 如果消息包含媒体且已更新，则需要重新发送新消息再删除旧消息
+                                if has_media and has_media_update:
+                                    try:
+                                        logger.debug(f"消息包含媒体更新，将重新发送新消息")
+                                        # 记录媒体类型
+                                        media_type = type(event.message.media).__name__
+                                        logger.debug(f"媒体类型: {media_type}")
+                                        
+                                        # 发送新的消息
+                                        new_msg = await self.client.send_message(
+                                            entity=dest_entity,
+                                            message=event.message.message,
+                                            file=event.message.media
+                                        )
+                                        
+                                        # 删除原来的消息
+                                        try:
+                                            await self.client.delete_messages(
+                                                entity=dest_entity,
+                                                message_ids=[record.forwarded_msg_id]
+                                            )
+                                        except Exception as del_err:
+                                            logger.error(f"删除原消息失败: {del_err}, 但将继续更新数据库记录")
+                                        
+                                        # 更新数据库记录
+                                        record.forwarded_msg_id = new_msg.id
+                                        record.message_title = message_title
+                                        record.forwarded_at = datetime.utcnow()
+                                        db.session.commit()
+                                        
+                                        logger.info(f"已通过重新发送更新媒体消息: 目标 {record.destination_channel_id}, 新消息ID {new_msg.id}")
+                                    except Exception as media_err:
+                                        logger.error(f"更新媒体消息失败: {media_err}")
+                                        error_msg = str(media_err).lower()
+                                        if "flood wait" in error_msg:
+                                            logger.warning(f"操作过于频繁，Telegram限制发送消息，需等待: {media_err}")
+                                        elif "chat write forbidden" in error_msg:
+                                            logger.error(f"没有在目标频道发送消息的权限")
+                                        # 尝试只更新文本部分
+                                        try:
+                                            logger.debug("尝试只更新消息文本内容")
+                                            await self.client.edit_message(
+                                                entity=dest_entity,
+                                                message=record.forwarded_msg_id,
+                                                text=message_text
+                                            )
+                                            logger.info(f"已更新消息文本内容: 目标 {record.destination_channel_id}, 消息ID {record.forwarded_msg_id}")
+                                            
+                                            # 更新数据库记录
+                                            record.message_title = message_title
+                                            record.forwarded_at = datetime.utcnow()
+                                            db.session.commit()
+                                        except Exception as text_err:
+                                            logger.error(f"更新消息文本内容也失败: {text_err}")
+                                            error_msg = str(text_err).lower()
+                                            if "message id invalid" in error_msg or "such message" in error_msg:
+                                                logger.info(f"消息ID无效或无法编辑该消息，这是正常的Telegram限制")
+                                            elif "flood wait" in error_msg:
+                                                logger.warning(f"操作过于频繁，Telegram限制发送消息，需等待: {text_err}")
+                                            if logger.isEnabledFor(logging.DEBUG):
+                                                logger.debug(traceback.format_exc())
+                                else:
+                                    # 对于任何消息都采用重新发送的策略，因为Telegram不允许编辑转发的消息
+                                    try:
+                                        logger.debug(f"尝试通过发送新消息并删除旧消息来更新内容")
+                                        
+                                        # 记录是否包含媒体及其类型
+                                        if has_media:
+                                            media_type = type(event.message.media).__name__
+                                            logger.debug(f"消息包含媒体，类型: {media_type}")
+                                        
+                                        # 发送新的消息
+                                        new_msg = await self.client.send_message(
+                                            entity=dest_entity,
+                                            message=message_text,
+                                            file=event.message.media if has_media else None
+                                        )
+                                        
+                                        # 删除原来的消息
+                                        try:
+                                            await self.client.delete_messages(
+                                                entity=dest_entity,
+                                                message_ids=[record.forwarded_msg_id]
+                                            )
+                                        except Exception as del_err:
+                                            logger.error(f"删除原消息失败: {del_err}")
+                                        
+                                        # 更新数据库记录
+                                        record.forwarded_msg_id = new_msg.id
+                                        record.message_title = message_title
+                                        record.forwarded_at = datetime.utcnow()
+                                        db.session.commit()
+                                        
+                                        logger.info(f"已通过重新发送更新消息: 目标 {record.destination_channel_id}, 新消息ID {new_msg.id}")
+                                    except Exception as e:
+                                        logger.error(f"重新发送消息失败: {e}")
+                                        error_msg = str(e).lower()
+                                        if "flood wait" in error_msg:
+                                            logger.warning(f"操作过于频繁，Telegram限制发送消息，需等待: {e}")
+                                        elif "message to edit not found" in error_msg:
+                                            logger.info(f"找不到要编辑的消息，可能已被删除")
+                                        elif "chat write forbidden" in error_msg:
+                                            logger.error(f"没有在目标频道发送消息的权限")
+                                        if logger.isEnabledFor(logging.DEBUG):
+                                            logger.debug(traceback.format_exc())
                             except Exception as e:
-                                logger.error(f"更新转发消息失败: {e}")
+                                error_msg = str(e).lower()
+                                if "not modified" in error_msg:
+                                    logger.info(f"消息内容未变更，无需更新: {record.destination_channel_id}, 消息ID {record.forwarded_msg_id}")
+                                else:
+                                    logger.error(f"更新转发消息失败: {e}")
+                                    if logger.isEnabledFor(logging.DEBUG):
+                                        logger.debug(traceback.format_exc())
                                 # 消息可能已被删除或无法编辑，记录错误但不阻止其他更新
                         else:
                             logger.debug(f"转发记录 {record.id} 没有保存转发后的消息ID，无法更新")
@@ -836,7 +945,21 @@ telegram_client = None
 def init_telegram_client(api_id, api_hash, phone, app=None):
     """初始化Telegram客户端"""
     global telegram_client
-    logger.debug(f"初始化Telegram客户端: API_ID={api_id}, 手机号={phone}")
+    
+    # 确保phone不为None
+    if phone is None:
+        logger.error("手机号码不能为空")
+        raise ValueError("手机号码不能为空")
+    
+    # 去除可能包含的额外引号
+    if isinstance(phone, str):
+        phone = phone.strip("'\"")
+        
+        # 确保手机号以+开头
+        if not phone.startswith('+'):
+            phone = '+' + phone
+    
+    logger.debug(f"初始化Telegram客户端: API_ID={api_id}, 手机号='{phone}'")
     telegram_client = TelegramForwarder(api_id, api_hash, phone)
     if app:
         telegram_client.app = app

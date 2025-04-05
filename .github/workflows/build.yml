@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build Flutter App
 on:
   push:
     branches:
@@ -18,31 +18,49 @@ jobs:
         with:
           flutter-version: '3.13.x'
           channel: 'stable'
-      - run: flutter pub get
+      
+      # 切换到apps目录
+      - name: Change to apps directory
+        run: cd apps
+      
+      # 在apps目录中运行Flutter命令
+      - name: Get Flutter dependencies
+        working-directory: ./apps
+        run: flutter pub get
+        
       - name: Create key.properties
+        working-directory: ./apps
         run: |
           echo "storePassword=${{ secrets.KEY_STORE_PASSWORD }}" > android/key.properties
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
           echo "keyAlias=tg_forwarder" >> android/key.properties
           echo "storeFile=../app/keystore.jks" >> android/key.properties
+          
       - name: Download Android keystore
         id: android_keystore
         uses: timheuer/base64-to-file@v1.2
         with:
           fileName: keystore.jks
           encodedString: ${{ secrets.KEYSTORE_BASE64 }}
+          
       - name: Copy keystore
+        working-directory: ./apps
         run: |
           mkdir -p android/app
           cp ${{ steps.android_keystore.outputs.filePath }} android/app/keystore.jks
-      - run: flutter build apk --release
+          
+      - name: Build APK
+        working-directory: ./apps
+        run: flutter build apk --release
+        
       - uses: actions/upload-artifact@v3
         with:
           name: release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: apps/build/app/outputs/flutter-apk/app-release.apk
+          
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "build/app/outputs/flutter-apk/app-release.apk"
+          artifacts: "apps/build/app/outputs/flutter-apk/app-release.apk"
           token: ${{ secrets.GITHUB_TOKEN }} 

@@ -65,11 +65,29 @@ def check_telegram_config():
     if not phone:
         print("请输入Telegram账号手机号 (格式: +86123456789):")
         phone = input().strip()
-        # 确保手机号格式正确
-        if not phone.startswith('+'):
-            print("提醒: 电话号码应该以'+'开头，已自动添加")
-            phone = '+' + phone
-        telegram_config['phone'] = phone
+        
+    # 确保手机号不为空并格式正确
+    if not phone or not isinstance(phone, str):
+        print("错误: 电话号码不能为空!")
+        return check_telegram_config()
+    
+    # 去除手机号中可能包含的引号
+    phone = phone.strip("'\"")
+    
+    # 确保手机号格式正确
+    if not phone.startswith('+'):
+        print("提醒: 电话号码应该以'+'开头，已自动添加")
+        phone = '+' + phone
+    
+    # 检查手机号是否包含有效数字
+    import re
+    if not re.match(r'\+\d{6,15}$', phone):
+        print(f"警告: 电话号码 '{phone}' 格式可能不正确，请确保格式为 '+国家代码电话号码'")
+        confirm = input("是否继续使用此电话号码? (y/n): ").strip().lower()
+        if confirm != 'y':
+            return check_telegram_config()
+    
+    telegram_config['phone'] = phone
     
     # 如果有任何配置被更新，保存配置文件
     config['telegram'] = telegram_config

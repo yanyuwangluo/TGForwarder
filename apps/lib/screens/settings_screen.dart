@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../config.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -19,7 +20,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoading = false;
   bool _isLoadingSettings = false;
   late AuthService _authService;
-  ApiService? _apiService;
+  final ApiService _apiService = ApiService();
 
   @override
   void initState() {
@@ -30,14 +31,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadServerUrl() async {
-    final serverUrl = await _authService.getServerUrl();
-    if (serverUrl != null && serverUrl.isNotEmpty) {
-      setState(() {
-        _serverUrlController.text = serverUrl;
-        _apiService = ApiService(baseUrl: serverUrl);
-      });
-      _loadSettings();
-    }
+    final serverUrl = await AppConfig.getApiBaseUrl();
+    setState(() {
+      _serverUrlController.text = serverUrl;
+    });
+    _loadSettings();
   }
   
   Future<void> _loadSecretKey() async {
@@ -50,14 +48,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSettings() async {
-    if (_apiService == null) return;
-    
     setState(() {
       _isLoadingSettings = true;
     });
     
     try {
-      final settings = await _apiService!.getSettings();
+      final settings = await _apiService.getSettings();
       setState(() {
         _apiIdController.text = settings['api_id']?.toString() ?? '';
         _apiHashController.text = settings['api_hash'] ?? '';
@@ -82,22 +78,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     
     try {
-      // 保存服务器URL
+      // 保存服务器URL和密钥
       final serverUrl = _serverUrlController.text.trim();
-      await _authService.saveServerUrl(serverUrl);
-      
-      // 保存密钥
       final secretKey = _secretKeyController.text.trim();
-      await _authService.saveSecretKey(secretKey);
-      
-      // 创建API服务
-      _apiService = ApiService(baseUrl: serverUrl);
       
       // 保存Telegram设置
       if (_apiIdController.text.isNotEmpty &&
           _apiHashController.text.isNotEmpty &&
           _phoneController.text.isNotEmpty) {
-        await _apiService!.updateSettings(
+        await _apiService.updateSettings(
           apiId: int.parse(_apiIdController.text.trim()),
           apiHash: _apiHashController.text.trim(),
           phone: _phoneController.text.trim(),

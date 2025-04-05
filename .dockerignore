@@ -43,6 +43,16 @@ sessions/
 instance/
 data/
 
+# Flutter/Dart应用忽略
+# 忽略整个Flutter应用目录，因为Docker中不需要它
+apps/
+**/ios/
+**/android/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/pubspec.lock
+
 # 其他
 .DS_Store
 Thumbs.db 

@@ -5,8 +5,15 @@ import 'screens/rules_screen.dart';
 import 'screens/messages_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/error_logs_screen.dart';
+import 'services/api_service.dart';
 
 void main() {
+  // 确保Flutter初始化完成
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // 初始化ApiService (将在首次访问时自动加载配置)
+  ApiService();
+  
   runApp(const MyApp());
 }
 

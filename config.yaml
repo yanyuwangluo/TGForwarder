@@ -4,7 +4,7 @@ flask:
 server:
   port: 5000
 telegram:
-  api_hash: 
-  api_id: 
-  phone: 
+  api_hash: 09730f6c7957ed10b5d09c866d9c90e7
+  api_id: 4862096
+  phone: '+8618562620724'
   session_name: ''
